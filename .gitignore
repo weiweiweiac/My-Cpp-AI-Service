@@ -1,0 +1,7 @@
+# 忽略配置文件（包含你的各种API Key）
+resource/config.json
+# 忽略编译产生的文件
+build/
+bin/
+*.o
+*.log
