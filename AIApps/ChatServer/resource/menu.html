@@ -673,8 +673,8 @@
                 </div>
                 <div class="menu-option" id="plan-service">
                     <span class="option-code">PLAN</span>
-                    <h2>生成训练计划</h2>
-                    <p>基于当前档案同步调用 AI，生成并写入未来 7 天训练日历。</p>
+                    <h2>生成计划 / 训练日历</h2>
+                    <p>基于当前档案生成未来 7 天计划，也可以直接打开某一天记录训练。</p>
                 </div>
                 <div class="menu-option primary" id="chat-service">
                     <span class="option-code">COACH</span>
@@ -790,6 +790,7 @@
                 </div>
                 <div class="actions">
                     <button type="button" class="ghost-btn" id="refresh-calendar">刷新日历</button>
+                    <button type="button" class="ghost-btn" id="open-selected-date">记录所选日期</button>
                     <button type="button" class="save-btn" id="generate-plan">生成训练计划</button>
                 </div>
             </div>
@@ -927,16 +928,27 @@
             alert(featureName + ' 即将上线，后续会接入知识库检索。');
         }
 
+        function valueOr(value, fallback) {
+            return value === null || value === undefined ? fallback : value;
+        }
+
+        function fieldValue(object, key, fallback) {
+            if (!object || object[key] === null || object[key] === undefined) {
+                return fallback;
+            }
+            return object[key];
+        }
+
         function fillProfileForm(profile) {
-            document.getElementById('profile-gender').value = profile?.gender || '';
-            document.getElementById('profile-age').value = profile?.age ?? '';
-            document.getElementById('profile-height').value = profile?.height_cm ?? '';
-            document.getElementById('profile-weight').value = profile?.weight_kg ?? '';
-            document.getElementById('profile-goal').value = profile?.goal || '';
-            document.getElementById('profile-level').value = profile?.training_level || '';
-            document.getElementById('profile-weekly-days').value = profile?.weekly_days ?? '';
-            document.getElementById('profile-equipment').value = profile?.equipment || '';
-            document.getElementById('profile-injury').value = profile?.injury_note || '';
+            document.getElementById('profile-gender').value = fieldValue(profile, 'gender', '');
+            document.getElementById('profile-age').value = fieldValue(profile, 'age', '');
+            document.getElementById('profile-height').value = fieldValue(profile, 'height_cm', '');
+            document.getElementById('profile-weight').value = fieldValue(profile, 'weight_kg', '');
+            document.getElementById('profile-goal').value = fieldValue(profile, 'goal', '');
+            document.getElementById('profile-level').value = fieldValue(profile, 'training_level', '');
+            document.getElementById('profile-weekly-days').value = fieldValue(profile, 'weekly_days', '');
+            document.getElementById('profile-equipment').value = fieldValue(profile, 'equipment', '');
+            document.getElementById('profile-injury').value = fieldValue(profile, 'injury_note', '');
         }
 
         async function loadProfile() {
@@ -999,7 +1011,7 @@
             grid.innerHTML = '';
 
             if (!activeCalendar.length) {
-                grid.innerHTML = '<div class="calendar-day"><h3>暂无日历记录</h3><p>先生成训练计划，或直接选择某天保存自定义训练记录。</p></div>';
+                grid.innerHTML = '<div class="calendar-day"><h3>暂无日历记录</h3><p>可以先生成训练计划，也可以直接用下方表单记录所选日期的自定义训练。</p></div>';
                 return;
             }
 
@@ -1027,14 +1039,21 @@
             const end = addDaysISO(start, 6);
             setStatus('calendar-status', '正在读取训练日历...');
             const data = await apiFetch(`/fitness/calendar/list?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`);
-            renderCalendar(data.calendar || []);
-            setStatus('calendar-status', data.calendar?.length ? '已加载训练日历' : '当前日期范围暂无日历');
-            if (data.calendar && data.calendar.length) {
-                const todayItem = data.calendar.find(item => (item.calendar_date || item.date) === todayISO());
+            const calendar = data.calendar || [];
+            renderCalendar(calendar);
+            if (calendar.length) {
+                setStatus('calendar-status', '已加载训练日历，点击日期即可记录训练');
+                const todayItem = calendar.find(item => (item.calendar_date || item.date) === todayISO());
                 if (todayItem) {
                     document.getElementById('today-title').textContent = todayItem.title || '今日训练';
                     document.getElementById('today-status').textContent = statusLabel(todayItem.status);
                 }
+                if (!currentDate) {
+                    await openDay((todayItem && (todayItem.calendar_date || todayItem.date)) || (calendar[0].calendar_date || calendar[0].date));
+                }
+            } else {
+                await openDay(start);
+                setStatus('calendar-status', '当前日期范围暂无日历，已打开所选日期的自定义训练记录表单');
             }
         }
 
@@ -1058,6 +1077,7 @@
                 }
             } catch (err) {
                 setStatus('calendar-status', err.message || '生成训练计划失败', true);
+                alert(err.message || '生成训练计划失败');
                 if ((err.message || '').includes('档案')) {
                     alert('请先完善“我的档案”，再生成训练计划。');
                 }
@@ -1071,26 +1091,39 @@
             currentDate = date || todayISO();
             setStatus('calendar-status', '正在读取当天训练详情...');
             const data = await apiFetch(`/fitness/calendar/day?date=${encodeURIComponent(currentDate)}`);
-            currentCalendarId = data.calendar?.id || null;
+            currentCalendarId = data.calendar && data.calendar.id ? data.calendar.id : null;
             renderDay(data.calendar, data.records || []);
             renderCalendar(activeCalendar);
             setStatus('calendar-status', '已加载当天训练详情');
         }
 
+        async function openSelectedDate() {
+            showPanel('calendar-panel');
+            const date = document.getElementById('plan-start-date').value || todayISO();
+            try {
+                await openDay(date);
+            } catch (err) {
+                setStatus('calendar-status', err.message || '打开训练记录表单失败', true);
+                alert(err.message || '打开训练记录表单失败');
+            }
+        }
+
         function renderDay(calendar, records) {
             document.getElementById('day-detail').style.display = 'grid';
-            document.getElementById('day-title').textContent = calendar?.title || `${currentDate} 自定义训练`;
-            document.getElementById('day-plan').textContent = calendar?.plan_content || '当天还没有计划内容，可以直接填写自定义训练记录。';
+            const itemType = fieldValue(calendar, 'item_type', 'custom');
+            const status = fieldValue(calendar, 'status', 'planned');
+            document.getElementById('day-title').textContent = fieldValue(calendar, 'title', '') || `${currentDate} 自定义训练`;
+            document.getElementById('day-plan').textContent = fieldValue(calendar, 'plan_content', '') || '当天还没有计划内容，可以直接填写自定义训练记录。';
             document.getElementById('day-badges').innerHTML = `
-                <span class="badge ${calendar?.item_type === 'rest' ? 'rest' : ''}">${itemTypeLabel(calendar?.item_type || 'custom')}</span>
-                <span class="badge ${calendar?.status === 'skipped' ? 'skipped' : calendar?.status === 'rest' ? 'rest' : ''}">${statusLabel(calendar?.status || 'planned')}</span>
+                <span class="badge ${itemType === 'rest' ? 'rest' : ''}">${itemTypeLabel(itemType)}</span>
+                <span class="badge ${status === 'skipped' ? 'skipped' : status === 'rest' ? 'rest' : ''}">${statusLabel(status)}</span>
                 <span class="badge">${currentDate}</span>
             `;
 
             const firstWithDuration = records.find(item => item.duration_minutes !== null && item.duration_minutes !== undefined);
             const firstWithFeeling = records.find(item => item.feeling_note);
-            document.getElementById('duration-minutes').value = firstWithDuration?.duration_minutes ?? '';
-            document.getElementById('feeling-note').value = firstWithFeeling?.feeling_note || '';
+            document.getElementById('duration-minutes').value = fieldValue(firstWithDuration, 'duration_minutes', '');
+            document.getElementById('feeling-note').value = fieldValue(firstWithFeeling, 'feeling_note', '');
 
             const rows = document.getElementById('record-rows');
             rows.innerHTML = '';
@@ -1106,12 +1139,12 @@
             row.className = 'record-row';
             row.innerHTML = `
                 <label>动作名称<input class="exercise-name" maxlength="100" value="${escapeAttr(record.exercise_name || '')}" placeholder="杠铃卧推"></label>
-                <label>重量kg<input class="weight-kg" type="number" min="0" max="1000" step="0.5" value="${record.weight_kg ?? ''}"></label>
-                <label>组数<input class="sets" type="number" min="1" max="50" value="${record.sets ?? 1}"></label>
-                <label>次数<input class="reps" type="number" min="0" max="1000" value="${record.reps ?? ''}"></label>
-                <label>RPE<input class="rpe" type="number" min="1" max="10" step="0.5" value="${record.rpe ?? ''}"></label>
-                <label>RIR<input class="rir" type="number" min="0" max="10" step="0.5" value="${record.rir ?? ''}"></label>
-                <label>休息秒<input class="rest-seconds" type="number" min="0" max="3600" value="${record.rest_seconds ?? ''}"></label>
+                <label>重量kg<input class="weight-kg" type="number" min="0" max="1000" step="0.5" value="${valueOr(record.weight_kg, '')}"></label>
+                <label>组数<input class="sets" type="number" min="1" max="50" value="${valueOr(record.sets, 1)}"></label>
+                <label>次数<input class="reps" type="number" min="0" max="1000" value="${valueOr(record.reps, '')}"></label>
+                <label>RPE<input class="rpe" type="number" min="1" max="10" step="0.5" value="${valueOr(record.rpe, '')}"></label>
+                <label>RIR<input class="rir" type="number" min="0" max="10" step="0.5" value="${valueOr(record.rir, '')}"></label>
+                <label>休息秒<input class="rest-seconds" type="number" min="0" max="3600" value="${valueOr(record.rest_seconds, '')}"></label>
                 <label>完成<span class="check-wrap"><input class="completed" type="checkbox" ${record.completed ? 'checked' : ''}></span></label>
                 <button type="button" class="remove-record">删</button>
             `;
@@ -1151,7 +1184,7 @@
                         records: collectRecords()
                     })
                 });
-                currentCalendarId = data.calendar?.id || currentCalendarId;
+                currentCalendarId = data.calendar && data.calendar.id ? data.calendar.id : currentCalendarId;
                 renderDay(data.calendar, data.records || []);
                 await loadCalendar();
                 setStatus('calendar-status', data.message || '训练记录保存成功');
@@ -1186,9 +1219,10 @@
             try {
                 const data = await apiFetch('/fitness/calendar/record/list');
                 renderRecordList(data.records || []);
-                setStatus('records-status', data.records?.length ? '已加载最近训练记录' : '最近 30 天暂无训练记录');
+                setStatus('records-status', data.records && data.records.length ? '已加载最近训练记录' : '最近 30 天暂无训练记录');
             } catch (err) {
                 setStatus('records-status', err.message || '读取训练记录失败', true);
+                alert(err.message || '读取训练记录失败');
             }
         }
 
@@ -1216,8 +1250,8 @@
                             <tr>
                                 <td>${escapeHtml(record.record_date || '')}</td>
                                 <td>${escapeHtml(record.exercise_name || '')}</td>
-                                <td>${record.weight_kg ?? '-'} kg / ${record.sets ?? '-'} 组 × ${record.reps ?? '-'} 次</td>
-                                <td>${record.rpe ?? '-'} / ${record.rir ?? '-'}</td>
+                                <td>${valueOr(record.weight_kg, '-')} kg / ${valueOr(record.sets, '-')} 组 × ${valueOr(record.reps, '-')} 次</td>
+                                <td>${valueOr(record.rpe, '-')} / ${valueOr(record.rir, '-')}</td>
                                 <td>${record.completed ? '是' : '否'}</td>
                                 <td>${escapeHtml(record.feeling_note || '')}</td>
                             </tr>
@@ -1228,12 +1262,15 @@
         }
 
         function escapeHtml(value) {
-            return String(value)
-                .replaceAll('&', '&amp;')
-                .replaceAll('<', '&lt;')
-                .replaceAll('>', '&gt;')
-                .replaceAll('"', '&quot;')
-                .replaceAll("'", '&#39;');
+            return String(value).replace(/[&<>"']/g, function (ch) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[ch];
+            });
         }
 
         function escapeAttr(value) {
@@ -1266,9 +1303,18 @@
                 await loadCalendar();
             } catch (err) {
                 setStatus('calendar-status', err.message || '读取训练日历失败', true);
+                alert(err.message || '读取训练日历失败');
             }
         });
-        document.getElementById('refresh-calendar').addEventListener('click', loadCalendar);
+        document.getElementById('refresh-calendar').addEventListener('click', async () => {
+            try {
+                await loadCalendar();
+            } catch (err) {
+                setStatus('calendar-status', err.message || '读取训练日历失败', true);
+                alert(err.message || '读取训练日历失败');
+            }
+        });
+        document.getElementById('open-selected-date').addEventListener('click', openSelectedDate);
         document.getElementById('generate-plan').addEventListener('click', generatePlan);
         document.getElementById('add-record').addEventListener('click', () => addRecordRow());
         document.getElementById('save-records').addEventListener('click', saveRecords);
