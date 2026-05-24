@@ -7,7 +7,7 @@
     <style>
         :root {
             --bg: #07110f;
-            --panel: rgba(12, 24, 21, 0.92);
+            --panel: rgba(12, 24, 21, 0.94);
             --panel-soft: rgba(255, 255, 255, 0.06);
             --line: rgba(125, 255, 184, 0.22);
             --text: #ecfff6;
@@ -33,6 +33,17 @@
                 linear-gradient(90deg, rgba(125, 255, 184, 0.035) 1px, transparent 1px),
                 linear-gradient(135deg, #07110f 0%, #10231d 48%, #0a1417 100%);
             background-size: 34px 34px, 34px 34px, auto;
+        }
+
+        button,
+        input,
+        select,
+        textarea {
+            font: inherit;
+        }
+
+        button {
+            border-radius: 8px;
         }
 
         #loading-container {
@@ -76,7 +87,7 @@
 
         #menu-container {
             display: none;
-            width: min(1160px, calc(100% - 36px));
+            width: min(1220px, calc(100% - 36px));
             margin: 0 auto;
             padding: 38px 0;
             animation: fadeIn 0.6s ease forwards;
@@ -116,7 +127,7 @@
         }
 
         .summary {
-            max-width: 720px;
+            max-width: 760px;
             margin: 0;
             color: #b9d5ca;
             line-height: 1.7;
@@ -126,7 +137,6 @@
             min-width: 116px;
             height: 42px;
             border: 1px solid rgba(255, 107, 107, 0.36);
-            border-radius: 8px;
             color: #ffe7e7;
             background: rgba(255, 107, 107, 0.12);
             cursor: pointer;
@@ -140,7 +150,7 @@
 
         .dashboard {
             display: grid;
-            grid-template-columns: 1.2fr 0.8fr;
+            grid-template-columns: 1.25fr 0.75fr;
             gap: 18px;
             margin-top: 28px;
         }
@@ -273,17 +283,17 @@
             color: #d9fff0;
         }
 
-        .profile-panel {
+        .workspace-panel {
             display: none;
             margin-top: 18px;
             padding: 24px;
         }
 
-        .profile-panel.is-open {
+        .workspace-panel.is-open {
             display: block;
         }
 
-        .profile-header {
+        .panel-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
@@ -291,26 +301,28 @@
             margin-bottom: 20px;
         }
 
-        .profile-header h2 {
+        .panel-header h2 {
             margin: 0 0 8px;
             font-size: 26px;
         }
 
-        .profile-header p {
+        .panel-header p {
             margin: 0;
             color: var(--muted);
             line-height: 1.6;
         }
 
-        .profile-status {
-            min-width: 180px;
+        .status-text {
+            min-width: 200px;
             color: var(--green);
             text-align: right;
             font-size: 13px;
             line-height: 1.6;
         }
 
-        .profile-form {
+        .profile-form,
+        .plan-controls,
+        .record-summary {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 14px;
@@ -346,7 +358,6 @@
             color: var(--text);
             background: rgba(2, 12, 10, 0.72);
             outline: none;
-            font: inherit;
         }
 
         .form-field textarea {
@@ -361,33 +372,209 @@
             box-shadow: 0 0 0 3px rgba(125, 255, 184, 0.12);
         }
 
-        .profile-actions {
+        .actions {
             display: flex;
             justify-content: flex-end;
             gap: 12px;
             grid-column: 1 / -1;
             margin-top: 4px;
+            flex-wrap: wrap;
         }
 
         .ghost-btn,
-        .save-btn {
+        .save-btn,
+        .small-btn,
+        .danger-btn {
             min-height: 42px;
-            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
             padding: 0 18px;
             cursor: pointer;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.06);
             font-weight: 800;
         }
 
-        .ghost-btn {
-            border: 1px solid rgba(255, 255, 255, 0.16);
-            color: var(--text);
-            background: rgba(255, 255, 255, 0.06);
-        }
-
-        .save-btn {
-            border: 1px solid rgba(125, 255, 184, 0.7);
+        .save-btn,
+        .small-btn.primary {
+            border-color: rgba(125, 255, 184, 0.7);
             color: #06110f;
             background: linear-gradient(135deg, var(--green), var(--cyan));
+        }
+
+        .danger-btn {
+            border-color: rgba(255, 107, 107, 0.5);
+            color: #ffe7e7;
+            background: rgba(255, 107, 107, 0.12);
+        }
+
+        .small-btn {
+            min-height: 34px;
+            padding: 0 12px;
+            font-size: 13px;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .calendar-day {
+            min-height: 180px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.045);
+            cursor: pointer;
+        }
+
+        .calendar-day:hover,
+        .calendar-day.is-active {
+            border-color: rgba(125, 255, 184, 0.62);
+            background: rgba(125, 255, 184, 0.08);
+        }
+
+        .calendar-day time {
+            display: block;
+            color: var(--cyan);
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+
+        .calendar-day h3 {
+            margin: 0 0 8px;
+            font-size: 16px;
+            line-height: 1.35;
+        }
+
+        .calendar-day p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .badge-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            height: 23px;
+            padding: 0 8px;
+            border-radius: 999px;
+            color: #06110f;
+            background: var(--green);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .badge.rest {
+            background: var(--amber);
+        }
+
+        .badge.skipped {
+            color: #fff;
+            background: var(--red);
+        }
+
+        .day-layout {
+            display: grid;
+            grid-template-columns: 0.9fr 1.1fr;
+            gap: 18px;
+            margin-top: 18px;
+        }
+
+        .plan-box,
+        .record-box,
+        .record-list-box {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.045);
+        }
+
+        .plan-content {
+            margin: 12px 0 0;
+            color: #dfffee;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .record-row {
+            display: grid;
+            grid-template-columns: 1.5fr 0.75fr 0.65fr 0.65fr 0.65fr 0.65fr 0.85fr 0.6fr 42px;
+            gap: 8px;
+            align-items: end;
+            margin-bottom: 10px;
+        }
+
+        .record-row label {
+            display: grid;
+            gap: 5px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .record-row input {
+            width: 100%;
+            min-height: 36px;
+            border: 1px solid rgba(125, 255, 184, 0.2);
+            border-radius: 8px;
+            padding: 8px;
+            color: var(--text);
+            background: rgba(2, 12, 10, 0.72);
+        }
+
+        .record-row .check-wrap {
+            min-height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(125, 255, 184, 0.2);
+            border-radius: 8px;
+        }
+
+        .record-row .remove-record {
+            min-height: 36px;
+            width: 42px;
+            border: 1px solid rgba(255, 107, 107, 0.42);
+            color: #ffe7e7;
+            background: rgba(255, 107, 107, 0.1);
+            cursor: pointer;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .history-table th,
+        .history-table td {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .history-table th {
+            color: var(--green);
+            font-weight: 800;
+        }
+
+        .muted {
+            color: var(--muted);
         }
 
         @keyframes fadeIn {
@@ -402,24 +589,34 @@
             }
         }
 
+        @media (max-width: 1080px) {
+            .calendar-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .day-layout,
+            .record-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @media (max-width: 920px) {
             .dashboard,
             .menu-grid,
             .status-panel,
-            .profile-form {
+            .profile-form,
+            .plan-controls,
+            .record-summary {
                 grid-template-columns: 1fr;
             }
 
-            .topline {
+            .topline,
+            .panel-header {
                 align-items: flex-start;
                 flex-direction: column;
             }
 
-            .profile-header {
-                flex-direction: column;
-            }
-
-            .profile-status {
+            .status-text {
                 min-width: 0;
                 text-align: left;
             }
@@ -444,7 +641,7 @@
             <div>
                 <div class="brand">AI FITNESS COMMAND CENTER</div>
                 <h1>训练控制台</h1>
-                <p class="summary">从这里进入个人档案、训练计划、AI 教练对话和训练记录。本轮先完成视觉入口，核心对话沿用现有聊天服务。</p>
+                <p class="summary">从个人档案开始，生成一周训练计划，在训练日历中查看安排，并记录每个动作的完成情况。AI 教练对话继续沿用现有聊天服务。</p>
             </div>
             <button class="logout-btn" id="logout">退出登录</button>
         </div>
@@ -452,18 +649,18 @@
         <section class="panel status-panel" aria-label="训练状态概览">
             <div class="stat">
                 <span>今日目标</span>
-                <strong>45 分钟</strong>
-                <em>力量 + 有氧</em>
+                <strong id="today-title">等待计划</strong>
+                <em id="today-status">生成计划后同步</em>
             </div>
             <div class="stat">
                 <span>本周重点</span>
-                <strong>增肌基础</strong>
-                <em>动作质量优先</em>
+                <strong>动作质量</strong>
+                <em>记录重量、次数、RPE/RIR</em>
             </div>
             <div class="stat">
-                <span>AI 建议</span>
-                <strong>先评估</strong>
-                <em>再生成计划</em>
+                <span>闭环进度</span>
+                <strong>档案 → 计划 → 记录</strong>
+                <em>逐动作沉淀训练数据</em>
             </div>
         </section>
 
@@ -472,12 +669,12 @@
                 <div class="menu-option" id="profile-service">
                     <span class="option-code">PROFILE</span>
                     <h2>我的档案</h2>
-                    <p>记录训练目标、基础体能、可用器械和饮食偏好。</p>
+                    <p>记录训练目标、身体数据、训练水平、器械环境和伤病限制。</p>
                 </div>
                 <div class="menu-option" id="plan-service">
                     <span class="option-code">PLAN</span>
                     <h2>生成训练计划</h2>
-                    <p>根据目标周期生成训练安排，本轮暂以入口展示为主。</p>
+                    <p>基于当前档案同步调用 AI，生成并写入未来 7 天训练日历。</p>
                 </div>
                 <div class="menu-option primary" id="chat-service">
                     <span class="option-code">COACH</span>
@@ -487,33 +684,33 @@
                 <div class="menu-option" id="record-service">
                     <span class="option-code">LOG</span>
                     <h2>训练记录</h2>
-                    <p>沉淀每次训练表现，为后续计划迭代准备数据。</p>
+                    <p>查看最近训练动作数据，回顾重量、组数、次数和训练感受。</p>
                 </div>
                 <div class="menu-option" id="knowledge-service">
                     <span class="option-code">KNOW</span>
                     <h2>健身知识库</h2>
-                    <p>查看动作要点、恢复原则和常见训练问题。</p>
+                    <p>动作要点、恢复原则和常见训练问题后续接入 RAG。</p>
                 </div>
             </div>
 
             <aside class="panel coach-panel">
                 <h2>今日教练提示</h2>
-                <p>开始对话前，可以先准备目标、训练年限、每周训练天数和器械条件，AI 教练会更容易给出可执行建议。</p>
+                <p>生成计划前先完善档案。记录训练时尽量写下每个动作的重量、次数、RPE/RIR 和主观感受，后续 AI 才能更稳定地迭代建议。</p>
                 <ul class="drill-list">
                     <li>目标：减脂、增肌、体态改善或体能提升</li>
                     <li>条件：训练时间、器械、伤病限制</li>
-                    <li>偏好：饮食习惯、恢复状态、动作熟悉度</li>
+                    <li>记录：重量、组数、次数、RPE/RIR、休息时间</li>
                 </ul>
             </aside>
         </section>
 
-        <section class="panel profile-panel" id="profile-panel" aria-label="我的健身档案">
-            <div class="profile-header">
+        <section class="panel workspace-panel" id="profile-panel" aria-label="我的健身档案">
+            <div class="panel-header">
                 <div>
                     <h2>我的健身档案</h2>
-                    <p>先记录基础身体数据、训练目标和限制条件，后续训练计划会从这里读取你的用户画像。</p>
+                    <p>后续训练计划会读取这里的用户画像。可选项没填不会阻止保存，但明显异常的数据会被拒绝。</p>
                 </div>
-                <div class="profile-status" id="profile-status">点击保存后同步到服务器</div>
+                <div class="status-text" id="profile-status">点击保存后同步到服务器</div>
             </div>
 
             <form class="profile-form" id="profile-form">
@@ -526,27 +723,22 @@
                         <option value="other">其他</option>
                     </select>
                 </div>
-
                 <div class="form-field">
                     <label for="profile-age">年龄</label>
                     <input id="profile-age" name="age" type="number" min="10" max="100" placeholder="例如 23">
                 </div>
-
                 <div class="form-field">
                     <label for="profile-weekly-days">每周训练天数</label>
                     <input id="profile-weekly-days" name="weekly_days" type="number" min="0" max="7" placeholder="例如 4">
                 </div>
-
                 <div class="form-field">
                     <label for="profile-height">身高 cm</label>
                     <input id="profile-height" name="height_cm" type="number" min="80" max="250" step="0.1" placeholder="例如 175">
                 </div>
-
                 <div class="form-field">
                     <label for="profile-weight">体重 kg</label>
                     <input id="profile-weight" name="weight_kg" type="number" min="20" max="300" step="0.1" placeholder="例如 70">
                 </div>
-
                 <div class="form-field">
                     <label for="profile-level">训练水平</label>
                     <select id="profile-level" name="training_level">
@@ -556,35 +748,110 @@
                         <option value="advanced">高级</option>
                     </select>
                 </div>
-
                 <div class="form-field wide">
                     <label for="profile-goal">训练目标</label>
                     <input id="profile-goal" name="goal" maxlength="100" placeholder="例如 增肌、减脂、提升体能">
                 </div>
-
                 <div class="form-field">
                     <label for="profile-equipment">可用器械/训练环境</label>
                     <input id="profile-equipment" name="equipment" maxlength="255" placeholder="例如 健身房器械、哑铃、徒手">
                 </div>
-
                 <div class="form-field full">
                     <label for="profile-injury">伤病或限制说明</label>
                     <textarea id="profile-injury" name="injury_note" maxlength="1000" placeholder="例如 膝盖不适、腰椎旧伤、避免高冲击动作"></textarea>
                 </div>
-
-                <div class="profile-actions">
+                <div class="actions">
                     <button type="button" class="ghost-btn" id="profile-cancel">收起</button>
                     <button type="submit" class="save-btn">保存档案</button>
                 </div>
             </form>
         </section>
+
+        <section class="panel workspace-panel" id="calendar-panel" aria-label="训练计划和日历">
+            <div class="panel-header">
+                <div>
+                    <h2>训练计划与日历</h2>
+                    <p>生成一周计划后，每一天都会写入训练日历。点击某一天可以查看计划并填写逐动作训练记录。</p>
+                </div>
+                <div class="status-text" id="calendar-status">准备生成训练计划</div>
+            </div>
+
+            <div class="plan-controls">
+                <div class="form-field">
+                    <label for="plan-start-date">计划开始日期</label>
+                    <input id="plan-start-date" type="date">
+                </div>
+                <div class="form-field">
+                    <label for="plan-model-type">生成模型</label>
+                    <select id="plan-model-type">
+                        <option value="1">通义千问</option>
+                        <option value="2">豆包</option>
+                    </select>
+                </div>
+                <div class="actions">
+                    <button type="button" class="ghost-btn" id="refresh-calendar">刷新日历</button>
+                    <button type="button" class="save-btn" id="generate-plan">生成训练计划</button>
+                </div>
+            </div>
+
+            <div class="calendar-grid" id="calendar-grid"></div>
+
+            <div class="day-layout" id="day-detail" style="display:none;">
+                <div class="plan-box">
+                    <div class="badge-row" id="day-badges"></div>
+                    <h3 id="day-title">选择日期查看计划</h3>
+                    <p class="plan-content" id="day-plan"></p>
+                    <div class="actions" style="justify-content:flex-start;">
+                        <button type="button" class="small-btn primary" data-status-action="completed">标记完成</button>
+                        <button type="button" class="small-btn" data-status-action="planned">改为计划中</button>
+                        <button type="button" class="danger-btn small-btn" data-status-action="skipped">跳过训练</button>
+                    </div>
+                </div>
+
+                <div class="record-box">
+                    <h3>逐动作训练记录</h3>
+                    <div class="record-summary">
+                        <div class="form-field">
+                            <label for="duration-minutes">锻炼时长 分钟</label>
+                            <input id="duration-minutes" type="number" min="0" max="600" placeholder="例如 60">
+                        </div>
+                        <div class="form-field full">
+                            <label for="feeling-note">本次训练感受</label>
+                            <textarea id="feeling-note" maxlength="1000" placeholder="例如 今天状态不错，卧推最后一组接近力竭"></textarea>
+                        </div>
+                    </div>
+                    <div id="record-rows"></div>
+                    <div class="actions">
+                        <button type="button" class="ghost-btn" id="add-record">新增动作</button>
+                        <button type="button" class="save-btn" id="save-records">保存训练记录</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel workspace-panel" id="records-panel" aria-label="最近训练记录">
+            <div class="panel-header">
+                <div>
+                    <h2>最近训练记录</h2>
+                    <p>按日期倒序展示最近 30 天动作记录，方便后续做容量统计和计划迭代。</p>
+                </div>
+                <div class="status-text" id="records-status">点击入口后自动读取</div>
+            </div>
+            <div class="record-list-box" id="records-list"></div>
+        </section>
     </main>
 
     <script>
+        const panels = ['profile-panel', 'calendar-panel', 'records-panel'];
+        let activeCalendar = [];
+        let currentDate = '';
+        let currentCalendarId = null;
+
         document.addEventListener('DOMContentLoaded', function () {
             const progressBar = document.querySelector('.progress-bar-inner');
             const loadingContainer = document.getElementById('loading-container');
             const menuContainer = document.getElementById('menu-container');
+            document.getElementById('plan-start-date').value = todayISO();
 
             let percent = 0;
             let interval = setInterval(() => {
@@ -600,6 +867,55 @@
             }, 120);
         });
 
+        window.addEventListener('load', function () {
+            const userId = sessionStorage.getItem('userId');
+            if (!userId) {
+                window.location.href = '/entry';
+            }
+        });
+
+        function todayISO() {
+            return new Date().toISOString().slice(0, 10);
+        }
+
+        function addDaysISO(dateText, days) {
+            const date = new Date(dateText + 'T00:00:00');
+            date.setDate(date.getDate() + days);
+            return date.toISOString().slice(0, 10);
+        }
+
+        function setStatus(id, message, isError = false) {
+            const el = document.getElementById(id);
+            el.textContent = message;
+            el.style.color = isError ? 'var(--red)' : 'var(--green)';
+        }
+
+        function showPanel(id) {
+            panels.forEach(panelId => {
+                document.getElementById(panelId).classList.toggle('is-open', panelId === id);
+            });
+            document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        async function apiFetch(url, options = {}) {
+            const res = await fetch(url, options);
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 401) {
+                handleUnauthorized();
+                throw new Error('请先登录');
+            }
+            if (!res.ok || data.success === false) {
+                throw new Error(data.message || '请求失败');
+            }
+            return data;
+        }
+
+        function handleUnauthorized() {
+            sessionStorage.clear();
+            alert('登录状态已失效，请重新登录。');
+            window.location.href = '/entry';
+        }
+
         function loadService(path, errorMsg) {
             fetch(path, { method: 'GET', headers: { 'Accept': 'text/html' } })
                 .then(res => res.text())
@@ -608,16 +924,7 @@
         }
 
         function showComingSoon(featureName) {
-            alert(featureName + ' 即将上线，本轮先保留健身场景入口。');
-        }
-
-        const profilePanel = document.getElementById('profile-panel');
-        const profileStatus = document.getElementById('profile-status');
-        const profileForm = document.getElementById('profile-form');
-
-        function setProfileStatus(message, isError = false) {
-            profileStatus.textContent = message;
-            profileStatus.style.color = isError ? 'var(--red)' : 'var(--green)';
+            alert(featureName + ' 即将上线，后续会接入知识库检索。');
         }
 
         function fillProfileForm(profile) {
@@ -632,31 +939,15 @@
             document.getElementById('profile-injury').value = profile?.injury_note || '';
         }
 
-        function handleUnauthorized() {
-            sessionStorage.clear();
-            alert('登录状态已失效，请重新登录。');
-            window.location.href = '/entry';
-        }
-
         async function loadProfile() {
-            setProfileStatus('正在读取档案...');
-            const res = await fetch('/fitness/profile', { method: 'GET', headers: { 'Accept': 'application/json' } });
-            const data = await res.json().catch(() => ({}));
-
-            if (res.status === 401) {
-                handleUnauthorized();
-                return;
-            }
-            if (!res.ok || data.success === false) {
-                throw new Error(data.message || '读取档案失败');
-            }
-
+            setStatus('profile-status', '正在读取档案...');
+            const data = await apiFetch('/fitness/profile', { method: 'GET', headers: { 'Accept': 'application/json' } });
             if (data.hasProfile) {
                 fillProfileForm(data.profile);
-                setProfileStatus('已读取服务器档案');
+                setStatus('profile-status', '已读取服务器档案');
             } else {
                 fillProfileForm(null);
-                setProfileStatus('还没有档案，填写后保存即可');
+                setStatus('profile-status', '还没有档案，填写后保存即可');
             }
         }
 
@@ -675,49 +966,318 @@
         }
 
         async function openProfilePanel() {
-            profilePanel.classList.add('is-open');
-            profilePanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            showPanel('profile-panel');
             try {
                 await loadProfile();
             } catch (err) {
-                setProfileStatus(err.message || '读取档案失败', true);
+                setStatus('profile-status', err.message || '读取档案失败', true);
             }
+        }
+
+        function statusLabel(status) {
+            const map = {
+                planned: '计划中',
+                completed: '已完成',
+                skipped: '已跳过',
+                rest: '休息'
+            };
+            return map[status] || status || '未计划';
+        }
+
+        function itemTypeLabel(type) {
+            const map = {
+                plan: '训练',
+                rest: '休息',
+                custom: '自定义'
+            };
+            return map[type] || type || '训练';
+        }
+
+        function renderCalendar(calendar) {
+            activeCalendar = calendar || [];
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+
+            if (!activeCalendar.length) {
+                grid.innerHTML = '<div class="calendar-day"><h3>暂无日历记录</h3><p>先生成训练计划，或直接选择某天保存自定义训练记录。</p></div>';
+                return;
+            }
+
+            activeCalendar.forEach(item => {
+                const date = item.calendar_date || item.date;
+                const card = document.createElement('div');
+                card.className = 'calendar-day' + (date === currentDate ? ' is-active' : '');
+                card.dataset.date = date;
+                card.innerHTML = `
+                    <time>${date}</time>
+                    <div class="badge-row">
+                        <span class="badge ${item.item_type === 'rest' ? 'rest' : ''}">${itemTypeLabel(item.item_type)}</span>
+                        <span class="badge ${item.status === 'skipped' ? 'skipped' : item.status === 'rest' ? 'rest' : ''}">${statusLabel(item.status)}</span>
+                    </div>
+                    <h3>${escapeHtml(item.title || '训练安排')}</h3>
+                    <p>${escapeHtml(item.plan_content || '暂无计划内容')}</p>
+                `;
+                card.addEventListener('click', () => openDay(date));
+                grid.appendChild(card);
+            });
+        }
+
+        async function loadCalendar() {
+            const start = document.getElementById('plan-start-date').value || todayISO();
+            const end = addDaysISO(start, 6);
+            setStatus('calendar-status', '正在读取训练日历...');
+            const data = await apiFetch(`/fitness/calendar/list?start_date=${encodeURIComponent(start)}&end_date=${encodeURIComponent(end)}`);
+            renderCalendar(data.calendar || []);
+            setStatus('calendar-status', data.calendar?.length ? '已加载训练日历' : '当前日期范围暂无日历');
+            if (data.calendar && data.calendar.length) {
+                const todayItem = data.calendar.find(item => (item.calendar_date || item.date) === todayISO());
+                if (todayItem) {
+                    document.getElementById('today-title').textContent = todayItem.title || '今日训练';
+                    document.getElementById('today-status').textContent = statusLabel(todayItem.status);
+                }
+            }
+        }
+
+        async function generatePlan() {
+            const button = document.getElementById('generate-plan');
+            const startDate = document.getElementById('plan-start-date').value || todayISO();
+            const modelType = document.getElementById('plan-model-type').value;
+            button.disabled = true;
+            button.textContent = '生成中...';
+            setStatus('calendar-status', 'AI 正在生成一周训练计划，同步响应可能需要等待...');
+            try {
+                const data = await apiFetch('/fitness/calendar/generate-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ startDate, modelType })
+                });
+                setStatus('calendar-status', data.message || '训练计划已生成');
+                renderCalendar(data.calendar || []);
+                if ((data.calendar || []).length) {
+                    openDay(data.calendar[0].calendar_date || data.calendar[0].date);
+                }
+            } catch (err) {
+                setStatus('calendar-status', err.message || '生成训练计划失败', true);
+                if ((err.message || '').includes('档案')) {
+                    alert('请先完善“我的档案”，再生成训练计划。');
+                }
+            } finally {
+                button.disabled = false;
+                button.textContent = '生成训练计划';
+            }
+        }
+
+        async function openDay(date) {
+            currentDate = date || todayISO();
+            setStatus('calendar-status', '正在读取当天训练详情...');
+            const data = await apiFetch(`/fitness/calendar/day?date=${encodeURIComponent(currentDate)}`);
+            currentCalendarId = data.calendar?.id || null;
+            renderDay(data.calendar, data.records || []);
+            renderCalendar(activeCalendar);
+            setStatus('calendar-status', '已加载当天训练详情');
+        }
+
+        function renderDay(calendar, records) {
+            document.getElementById('day-detail').style.display = 'grid';
+            document.getElementById('day-title').textContent = calendar?.title || `${currentDate} 自定义训练`;
+            document.getElementById('day-plan').textContent = calendar?.plan_content || '当天还没有计划内容，可以直接填写自定义训练记录。';
+            document.getElementById('day-badges').innerHTML = `
+                <span class="badge ${calendar?.item_type === 'rest' ? 'rest' : ''}">${itemTypeLabel(calendar?.item_type || 'custom')}</span>
+                <span class="badge ${calendar?.status === 'skipped' ? 'skipped' : calendar?.status === 'rest' ? 'rest' : ''}">${statusLabel(calendar?.status || 'planned')}</span>
+                <span class="badge">${currentDate}</span>
+            `;
+
+            const firstWithDuration = records.find(item => item.duration_minutes !== null && item.duration_minutes !== undefined);
+            const firstWithFeeling = records.find(item => item.feeling_note);
+            document.getElementById('duration-minutes').value = firstWithDuration?.duration_minutes ?? '';
+            document.getElementById('feeling-note').value = firstWithFeeling?.feeling_note || '';
+
+            const rows = document.getElementById('record-rows');
+            rows.innerHTML = '';
+            if (records.length) {
+                records.forEach(record => addRecordRow(record));
+            } else {
+                addRecordRow();
+            }
+        }
+
+        function addRecordRow(record = {}) {
+            const row = document.createElement('div');
+            row.className = 'record-row';
+            row.innerHTML = `
+                <label>动作名称<input class="exercise-name" maxlength="100" value="${escapeAttr(record.exercise_name || '')}" placeholder="杠铃卧推"></label>
+                <label>重量kg<input class="weight-kg" type="number" min="0" max="1000" step="0.5" value="${record.weight_kg ?? ''}"></label>
+                <label>组数<input class="sets" type="number" min="1" max="50" value="${record.sets ?? 1}"></label>
+                <label>次数<input class="reps" type="number" min="0" max="1000" value="${record.reps ?? ''}"></label>
+                <label>RPE<input class="rpe" type="number" min="1" max="10" step="0.5" value="${record.rpe ?? ''}"></label>
+                <label>RIR<input class="rir" type="number" min="0" max="10" step="0.5" value="${record.rir ?? ''}"></label>
+                <label>休息秒<input class="rest-seconds" type="number" min="0" max="3600" value="${record.rest_seconds ?? ''}"></label>
+                <label>完成<span class="check-wrap"><input class="completed" type="checkbox" ${record.completed ? 'checked' : ''}></span></label>
+                <button type="button" class="remove-record">删</button>
+            `;
+            row.querySelector('.remove-record').addEventListener('click', () => row.remove());
+            document.getElementById('record-rows').appendChild(row);
+        }
+
+        function collectRecords() {
+            return Array.from(document.querySelectorAll('.record-row'))
+                .map(row => ({
+                    exerciseName: row.querySelector('.exercise-name').value.trim(),
+                    weightKg: row.querySelector('.weight-kg').value,
+                    sets: row.querySelector('.sets').value,
+                    reps: row.querySelector('.reps').value,
+                    rpe: row.querySelector('.rpe').value,
+                    rir: row.querySelector('.rir').value,
+                    restSeconds: row.querySelector('.rest-seconds').value,
+                    completed: row.querySelector('.completed').checked
+                }))
+                .filter(record => record.exerciseName);
+        }
+
+        async function saveRecords() {
+            if (!currentDate) {
+                currentDate = document.getElementById('plan-start-date').value || todayISO();
+            }
+            setStatus('calendar-status', '正在保存训练记录...');
+            try {
+                const data = await apiFetch('/fitness/calendar/record/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        date: currentDate,
+                        calendarId: currentCalendarId,
+                        durationMinutes: document.getElementById('duration-minutes').value,
+                        feelingNote: document.getElementById('feeling-note').value.trim(),
+                        records: collectRecords()
+                    })
+                });
+                currentCalendarId = data.calendar?.id || currentCalendarId;
+                renderDay(data.calendar, data.records || []);
+                await loadCalendar();
+                setStatus('calendar-status', data.message || '训练记录保存成功');
+            } catch (err) {
+                setStatus('calendar-status', err.message || '保存训练记录失败', true);
+            }
+        }
+
+        async function updateStatus(status) {
+            if (!currentDate) {
+                alert('请先选择某一天。');
+                return;
+            }
+            setStatus('calendar-status', '正在更新训练状态...');
+            try {
+                const data = await apiFetch('/fitness/calendar/status/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ date: currentDate, status })
+                });
+                renderDay(data.calendar, data.records || []);
+                await loadCalendar();
+                setStatus('calendar-status', data.message || '训练状态已更新');
+            } catch (err) {
+                setStatus('calendar-status', err.message || '更新训练状态失败', true);
+            }
+        }
+
+        async function loadRecords() {
+            showPanel('records-panel');
+            setStatus('records-status', '正在读取最近训练记录...');
+            try {
+                const data = await apiFetch('/fitness/calendar/record/list');
+                renderRecordList(data.records || []);
+                setStatus('records-status', data.records?.length ? '已加载最近训练记录' : '最近 30 天暂无训练记录');
+            } catch (err) {
+                setStatus('records-status', err.message || '读取训练记录失败', true);
+            }
+        }
+
+        function renderRecordList(records) {
+            const box = document.getElementById('records-list');
+            if (!records.length) {
+                box.innerHTML = '<p class="muted">暂无训练记录。先在训练日历里选择某一天并保存动作记录。</p>';
+                return;
+            }
+
+            box.innerHTML = `
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>动作</th>
+                            <th>重量/组次</th>
+                            <th>RPE/RIR</th>
+                            <th>完成</th>
+                            <th>感受</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${records.map(record => `
+                            <tr>
+                                <td>${escapeHtml(record.record_date || '')}</td>
+                                <td>${escapeHtml(record.exercise_name || '')}</td>
+                                <td>${record.weight_kg ?? '-'} kg / ${record.sets ?? '-'} 组 × ${record.reps ?? '-'} 次</td>
+                                <td>${record.rpe ?? '-'} / ${record.rir ?? '-'}</td>
+                                <td>${record.completed ? '是' : '否'}</td>
+                                <td>${escapeHtml(record.feeling_note || '')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function escapeHtml(value) {
+            return String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function escapeAttr(value) {
+            return escapeHtml(value);
         }
 
         document.getElementById('profile-service').addEventListener('click', openProfilePanel);
         document.getElementById('profile-cancel').addEventListener('click', () => {
-            profilePanel.classList.remove('is-open');
+            document.getElementById('profile-panel').classList.remove('is-open');
         });
 
-        profileForm.addEventListener('submit', async (event) => {
+        document.getElementById('profile-form').addEventListener('submit', async (event) => {
             event.preventDefault();
-            setProfileStatus('正在保存档案...');
-
+            setStatus('profile-status', '正在保存档案...');
             try {
-                const res = await fetch('/fitness/profile/save', {
+                const data = await apiFetch('/fitness/profile/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     body: JSON.stringify(readProfilePayload())
                 });
-                const data = await res.json().catch(() => ({}));
-
-                if (res.status === 401) {
-                    handleUnauthorized();
-                    return;
-                }
-                if (!res.ok || data.success === false) {
-                    throw new Error(data.message || '保存档案失败');
-                }
-
-                setProfileStatus(data.message || '健身档案保存成功');
+                setStatus('profile-status', data.message || '健身档案保存成功');
             } catch (err) {
-                setProfileStatus(err.message || '保存档案失败', true);
+                setStatus('profile-status', err.message || '保存档案失败', true);
             }
         });
 
-        document.getElementById('plan-service').addEventListener('click', () => showComingSoon('生成训练计划'));
+        document.getElementById('plan-service').addEventListener('click', async () => {
+            showPanel('calendar-panel');
+            try {
+                await loadCalendar();
+            } catch (err) {
+                setStatus('calendar-status', err.message || '读取训练日历失败', true);
+            }
+        });
+        document.getElementById('refresh-calendar').addEventListener('click', loadCalendar);
+        document.getElementById('generate-plan').addEventListener('click', generatePlan);
+        document.getElementById('add-record').addEventListener('click', () => addRecordRow());
+        document.getElementById('save-records').addEventListener('click', saveRecords);
+        document.querySelectorAll('[data-status-action]').forEach(btn => {
+            btn.addEventListener('click', () => updateStatus(btn.dataset.statusAction));
+        });
+
         document.getElementById('chat-service').addEventListener('click', () => loadService('/chat', '进入 AI 教练对话异常！'));
-        document.getElementById('record-service').addEventListener('click', () => showComingSoon('训练记录'));
+        document.getElementById('record-service').addEventListener('click', loadRecords);
         document.getElementById('knowledge-service').addEventListener('click', () => showComingSoon('健身知识库'));
 
         document.getElementById('logout').addEventListener('click', () => {
@@ -739,13 +1299,6 @@
                     document.close();
                 })
                 .catch(() => alert('退出登录失败！'));
-        });
-
-        window.addEventListener('load', function () {
-            const userId = sessionStorage.getItem('userId');
-            if (!userId) {
-                window.location.href = '/entry';
-            }
         });
     </script>
 </body>
