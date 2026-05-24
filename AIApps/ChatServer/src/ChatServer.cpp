@@ -116,6 +116,22 @@ void ChatServer::start() {
 
 void ChatServer::initializeRouter() {
 
+    httpServer_.Get("/ping", [](const http::HttpRequest& req, http::HttpResponse* resp) {
+        const std::string body = "pong";
+        resp->setStatusLine(req.getVersion(), http::HttpResponse::k200Ok, "OK");
+        resp->setContentType("text/plain");
+        resp->setContentLength(body.size());
+        resp->setBody(body);
+    });
+
+    httpServer_.Post("/echo", [](const http::HttpRequest& req, http::HttpResponse* resp) {
+        const std::string body = req.getBody();
+        resp->setStatusLine(req.getVersion(), http::HttpResponse::k200Ok, "OK");
+        resp->setContentType("text/plain");
+        resp->setContentLength(body.size());
+        resp->setBody(body);
+    });
+
     httpServer_.Get("/", std::make_shared<ChatEntryHandler>(this));
     httpServer_.Get("/entry", std::make_shared<ChatEntryHandler>(this));
     
