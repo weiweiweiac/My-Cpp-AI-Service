@@ -1,143 +1,323 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>卡码AI助手</title>
+<title>AI 私人健身教练</title>
 <style>
-    /* 全局样式 */
-    body {
-        font-family: "Microsoft YaHei", Arial, sans-serif;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-        background-color: #f5f5f5;
-        color: #333;
+    :root {
+        --bg: #07110f;
+        --panel: rgba(12, 24, 21, 0.92);
+        --panel-soft: rgba(255, 255, 255, 0.06);
+        --line: rgba(125, 255, 184, 0.22);
+        --text: #ecfff6;
+        --muted: #91a99d;
+        --green: #7dffb8;
+        --cyan: #26d9d0;
+        --amber: #ffd166;
+        --danger: #ff6b6b;
     }
 
-    h1.title {
-        font-size: 36px;
-        font-weight: bold;
-        text-align: center;
-        margin-bottom: 30px;
-        background: linear-gradient(to right, #007bff, #00c6ff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+        color: var(--text);
+        background:
+            linear-gradient(rgba(125, 255, 184, 0.035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(125, 255, 184, 0.035) 1px, transparent 1px),
+            linear-gradient(135deg, #07110f 0%, #10231d 48%, #0a1417 100%);
+        background-size: 34px 34px, 34px 34px, auto;
+        display: grid;
+        place-items: center;
+        padding: 32px;
+    }
+
+    .shell {
+        width: min(1120px, 100%);
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) 420px;
+        gap: 28px;
+        align-items: stretch;
+    }
+
+    .hero,
+    .container {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 22px 70px rgba(0, 0, 0, 0.36);
+    }
+
+    .hero {
+        padding: 42px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .hero::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 0 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--green), var(--cyan), var(--amber));
+    }
+
+    .eyebrow {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        padding: 6px 10px;
+        border: 1px solid rgba(38, 217, 208, 0.4);
+        border-radius: 999px;
+        color: var(--green);
+        background: rgba(38, 217, 208, 0.08);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+    }
+
+    h1 {
+        margin: 28px 0 14px;
+        font-size: clamp(36px, 6vw, 68px);
+        line-height: 1.02;
+        letter-spacing: 0;
+    }
+
+    .subtitle {
+        max-width: 680px;
+        margin: 0;
+        color: #b9d5ca;
+        font-size: 17px;
+        line-height: 1.8;
+    }
+
+    .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin: 34px 0;
+    }
+
+    .metric {
+        min-height: 96px;
+        padding: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.045);
+    }
+
+    .metric strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--green);
+        font-size: 24px;
+    }
+
+    .metric span {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .feature-list {
+        display: grid;
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .feature-list li {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        color: #d9fff0;
+        line-height: 1.6;
+    }
+
+    .feature-list li::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        margin-top: 8px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 18px rgba(38, 217, 208, 0.8);
+        flex: 0 0 auto;
     }
 
     .container {
-        width: 360px;
-        padding: 25px;
-        background: #ffffff;
-        border-radius: 15px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-        box-sizing: border-box;
-        text-align: center;
-        transition: all 0.3s;
+        padding: 30px;
+        align-self: center;
     }
 
-    .container:hover {
-        box-shadow: 0 12px 25px rgba(0,0,0,0.15);
+    .form-head {
+        margin-bottom: 24px;
+    }
+
+    .form-head p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        line-height: 1.6;
     }
 
     h2 {
-        font-size: 24px;
-        margin-bottom: 20px;
-        color: #333;
+        margin: 0;
+        font-size: 26px;
+        letter-spacing: 0;
     }
 
     .form-group {
-        margin-bottom: 18px;
-        text-align: left;
+        margin-bottom: 16px;
     }
 
     .form-group label {
         display: block;
+        margin-bottom: 8px;
+        color: #ccefe2;
         font-size: 14px;
-        color: #555;
-        margin-bottom: 5px;
     }
 
     .form-group input {
-        width: calc(100% - 20px);
-        padding: 10px;
-        font-size: 14px;
-        border: 1px solid #ccc;
+        width: 100%;
+        height: 46px;
+        padding: 0 14px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
         border-radius: 8px;
-        background: #f9f9f9;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.07);
         outline: none;
-        transition: all 0.2s;
+        font-size: 15px;
+        transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
     }
 
     .form-group input:focus {
-        border-color: #007bff;
-        box-shadow: 0 0 8px rgba(0,123,255,0.3);
-        background: #fff;
+        border-color: var(--green);
+        box-shadow: 0 0 0 3px rgba(125, 255, 184, 0.14);
+        background: rgba(255, 255, 255, 0.1);
     }
 
     .btn {
         width: 100%;
-        padding: 12px;
-        font-size: 16px;
-        background-color: #007bff;
-        color: #fff;
-        border: none;
-        border-radius: 10px;
+        height: 48px;
+        border: 0;
+        border-radius: 8px;
         cursor: pointer;
-        font-weight: bold;
-        transition: all 0.3s;
+        color: #06110f;
+        background: linear-gradient(90deg, var(--green), var(--cyan));
+        font-weight: 700;
+        font-size: 16px;
+        transition: transform 0.18s, box-shadow 0.18s;
     }
 
     .btn:hover {
-        background-color: #0056b3;
-        transform: scale(1.03);
+        transform: translateY(-1px);
+        box-shadow: 0 12px 34px rgba(38, 217, 208, 0.22);
     }
 
     .switch {
-        margin-top: 15px;
+        margin-top: 18px;
+        color: var(--muted);
         font-size: 14px;
-        color: #666;
+        text-align: center;
     }
 
     .switch a {
-        color: #007bff;
-        text-decoration: none;
+        color: var(--green);
         cursor: pointer;
+        text-decoration: none;
+        font-weight: 700;
     }
 
-    .switch a:hover { text-decoration: underline; }
+    .switch a:hover {
+        text-decoration: underline;
+    }
 
-    #register-container { display: none; }
+    #register-container {
+        display: none;
+    }
 
-    /* 成功提示框 */
     #success-alert {
         position: fixed;
-        top: 20px;
+        top: 22px;
         left: 50%;
-        transform: translateX(-50%);
-        background: #007bff;
-        color: #fff;
-        padding: 12px 25px;
-        border-radius: 10px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        z-index: 20;
         display: none;
-        z-index: 1000;
-        font-weight: bold;
+        transform: translateX(-50%);
+        min-width: 220px;
+        padding: 12px 18px;
+        border: 1px solid rgba(125, 255, 184, 0.35);
+        border-radius: 8px;
+        color: var(--text);
+        background: rgba(6, 17, 15, 0.96);
+        box-shadow: 0 12px 34px rgba(0, 0, 0, 0.32);
+        text-align: center;
+        font-weight: 700;
+    }
+
+    @media (max-width: 880px) {
+        body {
+            padding: 18px;
+            align-items: start;
+        }
+
+        .shell {
+            grid-template-columns: 1fr;
+        }
+
+        .hero,
+        .container {
+            padding: 24px;
+        }
+
+        .metrics {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 </head>
 <body>
 <div id="success-alert">提示信息</div>
 
-<div>
-    <h1 class="title">卡码AI助手</h1>
+<main class="shell">
+    <section class="hero" aria-label="AI 私人健身教练介绍">
+        <div class="eyebrow">AI FITNESS COACH</div>
+        <h1>AI 私人健身教练</h1>
+        <p class="subtitle">
+            用一个智能训练中枢管理你的目标、计划、动作问题和饮食建议。登录后进入健身控制台，开始和 AI 教练制定下一次训练。
+        </p>
 
-    <!-- 登录 -->
-    <div class="container" id="login-container">
-        <h2>登录</h2>
+        <div class="metrics">
+            <div class="metric">
+                <strong>PLAN</strong>
+                <span>训练计划生成，围绕目标、周期和可用器械给出建议。</span>
+            </div>
+            <div class="metric">
+                <strong>FORM</strong>
+                <span>动作知识问答，拆解发力、姿态和常见错误。</span>
+            </div>
+            <div class="metric">
+                <strong>FUEL</strong>
+                <span>饮食和训练建议，配合训练强度调整恢复策略。</span>
+            </div>
+        </div>
+
+        <ul class="feature-list">
+            <li>适合增肌、减脂、体能提升和日常健康管理。</li>
+            <li>支持围绕训练计划、动作细节、饮食安排持续对话。</li>
+            <li>保留原有账号体系，直接使用现有登录注册流程。</li>
+        </ul>
+    </section>
+
+    <section class="container" id="login-container" aria-label="登录">
+        <div class="form-head">
+            <h2>登录训练空间</h2>
+            <p>进入你的 AI 健身教练控制台，继续训练计划和教练对话。</p>
+        </div>
         <form id="login-form">
             <div class="form-group">
                 <label for="login-username">用户名</label>
@@ -147,44 +327,53 @@
                 <label for="login-password">密码</label>
                 <input type="password" id="login-password" placeholder="请输入密码" required>
             </div>
-            <button type="submit" class="btn">登录</button>
+            <button type="submit" class="btn">进入 AI 健身教练</button>
         </form>
         <div class="switch">
-            没有账号？<a onclick="showRegister()">去注册账号</a>
+            还没有账号？<a onclick="showRegister()">创建训练账号</a>
         </div>
-    </div>
+    </section>
 
-    <!-- 注册 -->
-    <div class="container" id="register-container">
-        <h2>注册</h2>
+    <section class="container" id="register-container" aria-label="注册">
+        <div class="form-head">
+            <h2>创建训练账号</h2>
+            <p>注册后可以开始训练计划生成、动作知识问答和饮食建议咨询。</p>
+        </div>
         <form id="register-form">
             <div class="form-group">
                 <label for="register-username">用户名</label>
-                <input type="text" id="register-username" placeholder="请输入用户名" required>
+                <input type="text" id="register-username" placeholder="设置你的用户名" required>
             </div>
             <div class="form-group">
                 <label for="register-password">密码</label>
-                <input type="password" id="register-password" placeholder="请输入密码" required>
+                <input type="password" id="register-password" placeholder="设置登录密码" required>
             </div>
-            <button type="submit" class="btn">注册</button>
+            <button type="submit" class="btn">注册并开启训练</button>
         </form>
         <div class="switch">
             已有账号？<a onclick="showLogin()">返回登录</a>
         </div>
-    </div>
-</div>
+    </section>
+</main>
 
 <script>
 function showAlert(message){
     const alertBox = document.getElementById('success-alert');
     alertBox.textContent = message;
     alertBox.style.display = 'block';
-    setTimeout(()=>{alertBox.style.display='none';},1000);
+    setTimeout(()=>{alertBox.style.display='none';},1400);
 }
-function showRegister(){ document.getElementById('login-container').style.display='none'; document.getElementById('register-container').style.display='block'; }
-function showLogin(){ document.getElementById('register-container').style.display='none'; document.getElementById('login-container').style.display='block'; }
 
-// 登录
+function showRegister(){
+    document.getElementById('login-container').style.display='none';
+    document.getElementById('register-container').style.display='block';
+}
+
+function showLogin(){
+    document.getElementById('register-container').style.display='none';
+    document.getElementById('login-container').style.display='block';
+}
+
 document.getElementById('login-form').addEventListener('submit', function(e){
     e.preventDefault();
     const username=document.getElementById('login-username').value;
@@ -203,7 +392,7 @@ document.getElementById('login-form').addEventListener('submit', function(e){
         }else if(response.status===401){ showAlert('账号或密码错误！'); throw new Error('认证失败'); }
         else throw new Error('请求失败');
     }).then(data=>{
-        if(data && data.userId){ sessionStorage.setItem('userId', data.userId); showAlert('登录成功！'); window.location.href='/menu'; }
+        if(data && data.userId){ sessionStorage.setItem('userId', data.userId); showAlert('登录成功，正在进入训练控制台！'); window.location.href='/menu'; }
         else throw new Error('无效的响应数据');
     }).catch(error=>{
         console.error('Error:',error);
@@ -211,7 +400,6 @@ document.getElementById('login-form').addEventListener('submit', function(e){
     });
 });
 
-// 注册
 document.getElementById('register-form').addEventListener('submit', function(e){
     e.preventDefault();
     const username=document.getElementById('register-username').value;
@@ -223,7 +411,7 @@ document.getElementById('register-form').addEventListener('submit', function(e){
         body:JSON.stringify({username,password})
     }).then(response=>{
         if(response.status===200){
-            showAlert('注册成功！');
+            showAlert('注册成功，请登录训练空间！');
             document.getElementById('login-username').value=username;
             document.getElementById('login-password').value=password;
             setTimeout(showLogin,1000);

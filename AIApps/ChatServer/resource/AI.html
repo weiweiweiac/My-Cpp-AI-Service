@@ -1,240 +1,282 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>AI 聊天助手</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 教练对话</title>
     <style>
-        /* 全局样式 */
+        :root {
+            --bg: #07110f;
+            --panel: rgba(12, 24, 21, 0.94);
+            --panel-soft: rgba(255, 255, 255, 0.06);
+            --line: rgba(125, 255, 184, 0.22);
+            --text: #ecfff6;
+            --muted: #91a99d;
+            --green: #7dffb8;
+            --cyan: #26d9d0;
+            --amber: #ffd166;
+        }
+
         * {
             box-sizing: border-box;
         }
 
         body {
-            font-family: "Microsoft YaHei", Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            display: flex;
             height: 100vh;
-            background: linear-gradient(135deg, #1f1c2c, #928dab);
-            color: #fff;
-        }
-
-        /* 左侧会话列表 */
-        .session-list {
-            width: 240px;
             display: flex;
-            flex-direction: column;
-            background: rgba(0,0,0,0.4);
-            backdrop-filter: blur(6px);
-            border-right: 1px solid rgba(255,255,255,0.2);
+            color: var(--text);
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            background:
+                linear-gradient(rgba(125, 255, 184, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(125, 255, 184, 0.035) 1px, transparent 1px),
+                linear-gradient(135deg, #07110f 0%, #10231d 48%, #0a1417 100%);
+            background-size: 34px 34px, 34px 34px, auto;
             overflow: hidden;
         }
 
+        .session-list {
+            width: 282px;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--line);
+            background: rgba(6, 17, 15, 0.92);
+        }
+
         .session-list-header {
-            padding: 15px;
-            text-align: center;
-            font-weight: bold;
-            background: rgba(0,0,0,0.3);
-            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding: 22px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .session-list-header strong {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 20px;
+        }
+
+        .session-list-header span {
+            color: var(--muted);
+            font-size: 13px;
         }
 
         .new-chat-btn {
             width: 100%;
-            padding: 8px 0;
-            margin-top: 10px;
-            cursor: pointer;
-            background: #00c3ff;
-            color: #fff;
-            border: none;
+            height: 42px;
+            margin-top: 16px;
+            border: 0;
             border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            box-shadow: 0 0 8px #00c3ff;
-            transition: all 0.3s;
+            color: #06110f;
+            background: linear-gradient(90deg, var(--green), var(--cyan));
+            cursor: pointer;
+            font-weight: 800;
         }
 
-            .new-chat-btn:hover {
-                background: #00e1ff;
-                box-shadow: 0 0 15px #00e1ff;
-                transform: scale(1.05);
-            }
-
         .session-list ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
             flex: 1;
+            margin: 0;
+            padding: 10px;
             overflow-y: auto;
+            list-style: none;
         }
 
         .session-list li {
-            padding: 12px 15px;
+            margin-bottom: 8px;
+            padding: 12px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            color: #d9fff0;
+            background: rgba(255, 255, 255, 0.045);
             cursor: pointer;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            transition: background 0.2s;
+            transition: border-color 0.18s, background 0.18s;
         }
 
-            .session-list li.active {
-                background: #00c3ff;
-                color: #fff;
-                font-weight: 500;
-                box-shadow: 0 0 8px #00c3ff;
-            }
+        .session-list li.active {
+            border-color: rgba(125, 255, 184, 0.55);
+            background: rgba(125, 255, 184, 0.12);
+        }
 
-            .session-list li:hover {
-                background: rgba(0,195,255,0.2);
-            }
+        .session-list li:hover {
+            border-color: rgba(38, 217, 208, 0.5);
+        }
 
-        /* 右侧聊天区 */
         .chat-section {
+            min-width: 0;
             flex: 1;
             display: flex;
             flex-direction: column;
         }
 
         .top-bar {
-            padding: 12px 20px;
             display: flex;
             align-items: center;
             gap: 12px;
-            background: rgba(0,0,0,0.3);
-            backdrop-filter: blur(6px);
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-            z-index: 1;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--line);
+            background: rgba(12, 24, 21, 0.9);
         }
 
-            .top-bar button, .top-bar select {
-                padding: 6px 12px;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                font-size: 14px;
-                transition: all 0.3s;
-            }
+        .top-title {
+            min-width: 220px;
+            margin-right: auto;
+        }
 
-            .top-bar button {
-                background: #00c3ff;
-                color: #fff;
-                font-weight: bold;
-                box-shadow: 0 0 8px #00c3ff;
-            }
+        .top-title strong {
+            display: block;
+            font-size: 20px;
+        }
 
-                .top-bar button:hover {
-                    background: #00e1ff;
-                    box-shadow: 0 0 15px #00e1ff;
-                    transform: scale(1.05);
-                }
+        .top-title span {
+            color: var(--muted);
+            font-size: 13px;
+        }
 
-            .top-bar select {
-                background: #fff;
-                color: #111;
-                font-weight: bold;
-            }
+        .top-bar button,
+        .top-bar select {
+            height: 36px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .top-bar button {
+            padding: 0 13px;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .top-bar button:hover {
+            border-color: rgba(125, 255, 184, 0.5);
+        }
+
+        .top-bar select {
+            padding: 0 10px;
+            color: var(--text);
+            background: #10231d;
+        }
+
+        .model-label {
+            color: var(--muted);
+            white-space: nowrap;
+            font-size: 14px;
+        }
+
+        .prompt-strip {
+            display: flex;
+            gap: 10px;
+            padding: 14px 20px;
+            border-bottom: 1px solid rgba(125, 255, 184, 0.12);
+            background: rgba(6, 17, 15, 0.62);
+            overflow-x: auto;
+        }
+
+        .quick-prompt {
+            flex: 0 0 auto;
+            height: 34px;
+            padding: 0 12px;
+            border: 1px solid rgba(125, 255, 184, 0.3);
+            border-radius: 999px;
+            color: #d9fff0;
+            background: rgba(125, 255, 184, 0.08);
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .quick-prompt:hover {
+            border-color: var(--green);
+            color: var(--green);
+        }
 
         .chat-container {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 24px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            background: rgba(0,0,0,0.2);
-            backdrop-filter: blur(6px);
+            gap: 14px;
         }
 
         .message {
-            max-width: 70%;
-            padding: 14px 18px;
-            border-radius: 16px;
-            line-height: 1.5;
+            max-width: min(760px, 76%);
+            padding: 14px 16px;
+            border-radius: 8px;
+            line-height: 1.65;
             word-wrap: break-word;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            animation: fadeIn 0.3s ease;
-            position: relative;
+            animation: fadeIn 0.25s ease;
         }
 
         .user {
-            background: linear-gradient(135deg, #00c3ff, #00e1ff);
-            color: #fff;
             align-self: flex-end;
-            border-bottom-right-radius: 4px;
+            color: #06110f;
+            background: linear-gradient(135deg, var(--green), var(--cyan));
         }
 
         .assistant {
-            background: rgba(255,255,255,0.9);
-            color: #111;
             align-self: flex-start;
-            border-bottom-left-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            color: var(--text);
+            background: var(--panel);
         }
 
         .input-box {
             display: flex;
-            padding: 12px 15px;
-            background: rgba(0,0,0,0.3);
-            backdrop-filter: blur(6px);
-            border-top: 1px solid rgba(255,255,255,0.2);
             gap: 12px;
+            padding: 16px 20px;
+            border-top: 1px solid var(--line);
+            background: rgba(12, 24, 21, 0.95);
         }
 
         textarea {
             flex: 1;
-            resize: none;
-            border-radius: 10px;
-            padding: 12px;
-            font-size: 14px;
+            min-height: 54px;
+            max-height: 140px;
+            resize: vertical;
+            padding: 13px 14px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 8px;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.07);
             outline: none;
-            border: 1px solid rgba(255,255,255,0.3);
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            transition: all 0.2s;
+            font-size: 15px;
+            line-height: 1.5;
         }
 
-            textarea:focus {
-                border-color: #00c3ff;
-                box-shadow: 0 0 8px #00c3ff;
-                background: rgba(255,255,255,0.15);
-            }
+        textarea:focus {
+            border-color: var(--green);
+            box-shadow: 0 0 0 3px rgba(125, 255, 184, 0.14);
+        }
 
         button[type="submit"] {
-            background: #00c3ff;
-            color: #fff;
-            font-weight: bold;
-            box-shadow: 0 0 8px #00c3ff;
+            width: 112px;
+            border: 0;
+            border-radius: 8px;
+            color: #06110f;
+            background: linear-gradient(90deg, var(--green), var(--cyan));
+            cursor: pointer;
+            font-weight: 800;
         }
-
-            button[type="submit"]:hover {
-                background: #00e1ff;
-                box-shadow: 0 0 15px #00e1ff;
-                transform: scale(1.05);
-            }
 
         .tts-btn {
-            padding: 6px 10px;
+            flex: 0 0 auto;
+            height: 30px;
+            padding: 0 10px;
+            border: 1px solid rgba(38, 217, 208, 0.42);
             border-radius: 8px;
-            font-size: 12px;
+            color: var(--cyan);
+            background: rgba(38, 217, 208, 0.08);
             cursor: pointer;
-            background: #28a745;
-            color: white;
-            border: none;
-            transition: all 0.2s;
+            font-size: 12px;
         }
-
-            .tts-btn:hover {
-                background: #1e7e34;
-            }
 
         ::-webkit-scrollbar {
             width: 8px;
+            height: 8px;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.3);
-            border-radius: 4px;
+            border-radius: 999px;
+            background: rgba(125, 255, 184, 0.26);
         }
-
-            ::-webkit-scrollbar-thumb:hover {
-                background: rgba(255,255,255,0.5);
-            }
 
         @keyframes fadeIn {
             from {
@@ -247,43 +289,81 @@
                 transform: translateY(0);
             }
         }
+
+        @media (max-width: 860px) {
+            body {
+                flex-direction: column;
+                overflow: auto;
+            }
+
+            .session-list {
+                width: 100%;
+                max-height: 210px;
+                border-right: 0;
+                border-bottom: 1px solid var(--line);
+            }
+
+            .top-bar {
+                align-items: stretch;
+                flex-wrap: wrap;
+            }
+
+            .top-title {
+                min-width: 100%;
+            }
+
+            .message {
+                max-width: 94%;
+            }
+        }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.0/dist/purify.min.js"></script>
 </head>
 <body>
-    <div class="session-list">
+    <aside class="session-list">
         <div class="session-list-header">
-            会话列表
-            <button class="new-chat-btn" id="newChatBtn">＋ 新聊天</button>
+            <strong>训练对话</strong>
+            <span>按会话保存你的训练咨询记录</span>
+            <button class="new-chat-btn" id="newChatBtn">开始新训练咨询</button>
         </div>
         <ul id="sessionList"></ul>
-    </div>
+    </aside>
 
-    <div class="chat-section">
+    <main class="chat-section">
         <div class="top-bar">
-            <button class="back-btn" onclick="window.location.href='/menu'">← 返回</button>
-            <button class="sync-btn" id="sync-history-btn">同步历史数据</button>
-            <label for="modelType">选择模型：</label>
+            <button class="back-btn" onclick="window.location.href='/menu'">返回控制台</button>
+            <div class="top-title">
+                <strong>AI 教练对话</strong>
+                <span>输入训练目标、动作问题或饮食困惑</span>
+            </div>
+            <button class="sync-btn" id="sync-history-btn">同步历史</button>
+            <label class="model-label" for="modelType">模型</label>
             <select id="modelType">
                 <option value="1" selected>阿里百炼</option>
                 <option value="2">豆包</option>
-                <option value="3">百炼RAG</option>
-                <option value="4">阿里百炼MCP</option>
+                <option value="3">百炼 RAG</option>
+                <option value="4">阿里百炼 MCP</option>
             </select>
+        </div>
+
+        <div class="prompt-strip" aria-label="快捷健身问题">
+            <button type="button" class="quick-prompt" data-prompt="我想减脂，每周能训练 3 次，请帮我生成一份入门训练计划。">减脂训练计划</button>
+            <button type="button" class="quick-prompt" data-prompt="深蹲时膝盖和腰部应该注意什么？请用动作要点说明。">动作知识问答</button>
+            <button type="button" class="quick-prompt" data-prompt="训练后应该怎么安排饮食和恢复？请给我简单可执行的建议。">饮食恢复建议</button>
+            <button type="button" class="quick-prompt" data-prompt="我今天只有 30 分钟，请安排一次全身训练。">30 分钟训练</button>
         </div>
 
         <div class="chat-container" id="chat-container"></div>
 
         <form class="input-box" id="chat-form">
-            <textarea id="question" placeholder="请输入你的问题..." required></textarea>
+            <textarea id="question" placeholder="例如：我想增肌，每周训练 4 次，有哑铃和卧推凳，请帮我安排计划。" required></textarea>
             <button type="submit">发送</button>
         </form>
-    </div>
+    </main>
 
     <script>
-        
         let currentSessionId = null, tempSession = false;
         const sessions = {};
         const sessionList = document.getElementById('sessionList');
@@ -308,7 +388,7 @@
             msgDiv.classList.add('message', role);
             const safeHtml = DOMPurify.sanitize(marked.parse(content));
             const escapedContent = content.replace(/`/g, '\\`').replace(/\$/g, '\\$');
-            msgDiv.innerHTML = `<div style="display:flex; align-items:center; gap:10px;"><div style="flex:1;"><b>${role === 'user' ? '你' : 'AI'}:</b><br>${safeHtml}</div><button class="tts-btn" onclick="playTTS(\`${escapedContent}\`)">🔊</button></div>`;
+            msgDiv.innerHTML = `<div style="display:flex; align-items:flex-start; gap:10px;"><div style="flex:1;"><b>${role === 'user' ? '你' : 'AI 教练'}:</b><br>${safeHtml}</div><button class="tts-btn" onclick="playTTS(\`${escapedContent}\`)">朗读</button></div>`;
             chatContainer.appendChild(msgDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
@@ -319,7 +399,7 @@
             sessionList.innerHTML = '';
             for (let id in sessions) {
                 const li = document.createElement('li');
-                li.textContent = sessions[id].name || `会话 ${id}`;
+                li.textContent = sessions[id].name || `训练咨询 ${id}`;
                 li.dataset.id = id;
                 if (id === currentSessionId) li.classList.add('active');
                 li.onclick = () => switchSession(id);
@@ -347,12 +427,25 @@
             currentSessionId = 'temp';
             tempSession = true;
             clearMessages();
+            questionInput.focus();
+        });
+
+        document.querySelectorAll('.quick-prompt').forEach(btn => {
+            btn.addEventListener('click', () => {
+                questionInput.value = btn.dataset.prompt;
+                questionInput.focus();
+            });
         });
 
         chatForm.addEventListener('submit', async e => {
             e.preventDefault();
             const question = questionInput.value.trim();
             if (!question) return;
+
+            if (!currentSessionId) {
+                currentSessionId = 'temp';
+                tempSession = true;
+            }
 
             appendMessage('user', question);
 
@@ -367,7 +460,7 @@
                     if (data.success) {
                         const sessionId = String(data.sessionId);
                         sessions[sessionId] = {
-                            name: '新会话',
+                            name: '训练咨询',
                             messages: [
                                 { role: 'user', content: question },
                                 { role: 'assistant', content: data.Information }
@@ -410,7 +503,7 @@
 
         syncBtn.addEventListener('click', async () => {
             if (!currentSessionId || tempSession) {
-                alert('请选择已有会话进行同步');
+                alert('请选择已有训练咨询进行同步');
                 return;
             }
             try {
@@ -443,7 +536,7 @@
                 if (data.success && Array.isArray(data.sessions)) {
                     data.sessions.forEach(s => {
                         const sid = String(s.sessionId);
-                        sessions[sid] = { name: s.name || `会话 ${sid}`, messages: [] };
+                        sessions[sid] = { name: s.name || `训练咨询 ${sid}`, messages: [] };
                     });
                     renderSessionList();
                 }

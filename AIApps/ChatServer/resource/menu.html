@@ -1,168 +1,381 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>欢迎来到AI助手界面</title>
+    <title>AI 健身教练控制台</title>
     <style>
-        
+        :root {
+            --bg: #07110f;
+            --panel: rgba(12, 24, 21, 0.92);
+            --panel-soft: rgba(255, 255, 255, 0.06);
+            --line: rgba(125, 255, 184, 0.22);
+            --text: #ecfff6;
+            --muted: #91a99d;
+            --green: #7dffb8;
+            --cyan: #26d9d0;
+            --amber: #ffd166;
+            --red: #ff6b6b;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: "Microsoft YaHei", Arial, sans-serif;
-            color: #fff;
-            overflow: hidden;
-            background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+            min-height: 100vh;
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            color: var(--text);
+            overflow-x: hidden;
+            background:
+                linear-gradient(rgba(125, 255, 184, 0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(125, 255, 184, 0.035) 1px, transparent 1px),
+                linear-gradient(135deg, #07110f 0%, #10231d 48%, #0a1417 100%);
+            background-size: 34px 34px, 34px 34px, auto;
         }
 
-        
-        .stars {
-            width: 2px;
-            height: 2px;
-            background: white;
-            border-radius: 50%;
-            position: absolute;
-            animation: twinkling 3s infinite ease-in-out;
-        }
-
-        @keyframes twinkling {
-            0%, 100% { opacity: 0.2; }
-            50% { opacity: 1; }
-        }
-
-        
         #loading-container {
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            padding: 24px;
             text-align: center;
         }
 
-        
         #loading-title {
-            font-size: 2.5em;
-            margin-bottom: 30px;
-            color: #00c3ff;
-            text-shadow: 0 0 10px #00c3ff, 0 0 20px #008bff, 0 0 30px #00e1ff;
-            letter-spacing: 3px;
-            animation: pulse 2s infinite;
+            margin-bottom: 24px;
+            color: var(--green);
+            font-size: clamp(28px, 6vw, 52px);
+            font-weight: 800;
+            letter-spacing: 0;
         }
 
-        @keyframes pulse {
-            0%, 100% { text-shadow: 0 0 10px #00c3ff, 0 0 20px #008bff; }
-            50% { text-shadow: 0 0 20px #00e1ff, 0 0 40px #00ffff; }
-        }
-
-        
         .progress-bar {
-            width: 320px;
-            height: 22px;
-            background: #222;
-            border-radius: 12px;
+            width: min(420px, 82vw);
+            height: 12px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
             overflow: hidden;
-            box-shadow: 0 0 15px #00c3ff;
+            background: rgba(255, 255, 255, 0.08);
         }
 
         .progress-bar-inner {
             height: 100%;
-            background: linear-gradient(90deg, #00c3ff, #00e1ff, #00fff7);
             width: 0;
+            background: linear-gradient(90deg, var(--green), var(--cyan), var(--amber));
             transition: width 0.3s ease;
         }
 
-        
         #loading-text {
-            margin-top: 20px;
-            font-size: 1.2em;
-            color: #ccc;
+            margin-top: 18px;
+            color: var(--muted);
         }
 
-        
         #menu-container {
             display: none;
-            text-align: center;
-            padding: 60px 20px;
-            animation: fadeIn 1s ease forwards;
+            width: min(1160px, calc(100% - 36px));
+            margin: 0 auto;
+            padding: 38px 0;
+            animation: fadeIn 0.6s ease forwards;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
+        .topline {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+
+        .brand {
+            display: inline-flex;
+            gap: 10px;
+            align-items: center;
+            color: var(--green);
+            font-size: 13px;
+            letter-spacing: 0.08em;
+        }
+
+        .brand::before {
+            content: "";
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 18px rgba(125, 255, 184, 0.8);
         }
 
         h1 {
-            font-size: 2.8em;
-            margin-bottom: 30px;
-            color: #00e1ff;
-            text-shadow: 0 0 15px #00c3ff, 0 0 30px #008bff;
+            margin: 0 0 10px;
+            font-size: clamp(32px, 5vw, 62px);
+            line-height: 1.06;
+            letter-spacing: 0;
+        }
+
+        .summary {
+            max-width: 720px;
+            margin: 0;
+            color: #b9d5ca;
+            line-height: 1.7;
+        }
+
+        .logout-btn {
+            min-width: 116px;
+            height: 42px;
+            border: 1px solid rgba(255, 107, 107, 0.36);
+            border-radius: 8px;
+            color: #ffe7e7;
+            background: rgba(255, 107, 107, 0.12);
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--red);
+            background: rgba(255, 107, 107, 0.2);
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 18px;
+            margin-top: 28px;
+        }
+
+        .panel {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--panel);
+            box-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
+        }
+
+        .status-panel {
+            padding: 24px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .stat {
+            min-height: 104px;
+            padding: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.045);
+        }
+
+        .stat span {
+            display: block;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .stat strong {
+            display: block;
+            margin-top: 12px;
+            color: var(--text);
+            font-size: 24px;
+        }
+
+        .stat em {
+            display: block;
+            margin-top: 8px;
+            color: var(--green);
+            font-style: normal;
+            font-size: 12px;
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            padding: 24px;
         }
 
         .menu-option {
-            margin: 15px 0;
-            font-size: 1.6em;
-            padding: 12px 25px;
-            border-radius: 10px;
-            display: inline-block;
-            background: rgba(0, 195, 255, 0.1);
-            border: 1px solid #00c3ff;
-            color: #fff;
+            min-height: 150px;
+            padding: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 0 8px #00c3ff;
+            transition: transform 0.18s, border-color 0.18s, background 0.18s;
         }
 
         .menu-option:hover {
-            background: rgba(0, 225, 255, 0.2);
-            color: #00ffff;
-            text-shadow: 0 0 10px #00e1ff;
-            transform: scale(1.05);
-            box-shadow: 0 0 15px #00e1ff;
+            transform: translateY(-2px);
+            border-color: rgba(125, 255, 184, 0.56);
+            background: rgba(125, 255, 184, 0.08);
         }
 
-        .menu-border {
-            margin: 20px auto;
-            width: 85%;
-            height: 2px;
-            background: #00c3ff;
-            box-shadow: 0 0 10px #00c3ff;
+        .menu-option.primary {
+            border-color: rgba(125, 255, 184, 0.48);
+            background: linear-gradient(135deg, rgba(125, 255, 184, 0.18), rgba(38, 217, 208, 0.08));
+        }
+
+        .option-code {
+            display: inline-flex;
+            align-items: center;
+            height: 24px;
+            padding: 0 9px;
+            border-radius: 999px;
+            color: #06110f;
+            background: var(--green);
+            font-weight: 800;
+            font-size: 12px;
+        }
+
+        .menu-option h2 {
+            margin: 16px 0 8px;
+            color: var(--text);
+            font-size: 22px;
+            letter-spacing: 0;
+        }
+
+        .menu-option p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .coach-panel {
+            padding: 24px;
+        }
+
+        .coach-panel h2 {
+            margin: 0 0 12px;
+            font-size: 24px;
+        }
+
+        .coach-panel p {
+            margin: 0 0 18px;
+            color: var(--muted);
+            line-height: 1.7;
+        }
+
+        .drill-list {
+            display: grid;
+            gap: 10px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .drill-list li {
+            padding: 12px;
+            border-left: 3px solid var(--cyan);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.045);
+            color: #d9fff0;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(18px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 920px) {
+            .dashboard,
+            .menu-grid,
+            .status-panel {
+                grid-template-columns: 1fr;
+            }
+
+            .topline {
+                align-items: flex-start;
+                flex-direction: column;
+            }
         }
     </style>
 </head>
-
 <body>
-    
-    <script>
-        for (let i = 0; i < 80; i++) {
-            let star = document.createElement("div");
-            star.className = "stars";
-            star.style.top = Math.random() * window.innerHeight + "px";
-            star.style.left = Math.random() * window.innerWidth + "px";
-            star.style.animationDuration = 2 + Math.random() * 3 + "s";
-            document.body.appendChild(star);
-        }
-    </script>
-
-    
     <div id="loading-container">
-        <div id="loading-title">AI 助手 启动中...</div>
+        <div id="loading-title">AI 健身教练启动中...</div>
         <div class="progress-bar">
             <div class="progress-bar-inner"></div>
         </div>
-        <div id="loading-text">系统正在初始化，请稍候...</div>
+        <div id="loading-text">正在加载训练控制台，请稍候...</div>
     </div>
 
-    
-    <div id="menu-container">
-        <h1>✨ 欢迎来到 AI 助手 ✨</h1>
-        <div class="menu-border"></div>
-        <div class="menu-option" id="chat-service">[1] 进入 AI 聊天助手</div>
-        <div class="menu-option" id="image-service">[2] 进入 AI 图像识别助手</div>
-        <div class="menu-option" id="logout">[0] 退出登录</div>
-    </div>
+    <main id="menu-container">
+        <div class="topline">
+            <div>
+                <div class="brand">AI FITNESS COMMAND CENTER</div>
+                <h1>训练控制台</h1>
+                <p class="summary">从这里进入个人档案、训练计划、AI 教练对话和训练记录。本轮先完成视觉入口，核心对话沿用现有聊天服务。</p>
+            </div>
+            <button class="logout-btn" id="logout">退出登录</button>
+        </div>
+
+        <section class="panel status-panel" aria-label="训练状态概览">
+            <div class="stat">
+                <span>今日目标</span>
+                <strong>45 分钟</strong>
+                <em>力量 + 有氧</em>
+            </div>
+            <div class="stat">
+                <span>本周重点</span>
+                <strong>增肌基础</strong>
+                <em>动作质量优先</em>
+            </div>
+            <div class="stat">
+                <span>AI 建议</span>
+                <strong>先评估</strong>
+                <em>再生成计划</em>
+            </div>
+        </section>
+
+        <section class="dashboard">
+            <div class="panel menu-grid" aria-label="健身场景入口">
+                <div class="menu-option" id="profile-service">
+                    <span class="option-code">PROFILE</span>
+                    <h2>我的档案</h2>
+                    <p>记录训练目标、基础体能、可用器械和饮食偏好。</p>
+                </div>
+                <div class="menu-option" id="plan-service">
+                    <span class="option-code">PLAN</span>
+                    <h2>生成训练计划</h2>
+                    <p>根据目标周期生成训练安排，本轮暂以入口展示为主。</p>
+                </div>
+                <div class="menu-option primary" id="chat-service">
+                    <span class="option-code">COACH</span>
+                    <h2>AI 教练对话</h2>
+                    <p>进入原有聊天入口，咨询动作、训练计划和饮食建议。</p>
+                </div>
+                <div class="menu-option" id="record-service">
+                    <span class="option-code">LOG</span>
+                    <h2>训练记录</h2>
+                    <p>沉淀每次训练表现，为后续计划迭代准备数据。</p>
+                </div>
+                <div class="menu-option" id="knowledge-service">
+                    <span class="option-code">KNOW</span>
+                    <h2>健身知识库</h2>
+                    <p>查看动作要点、恢复原则和常见训练问题。</p>
+                </div>
+            </div>
+
+            <aside class="panel coach-panel">
+                <h2>今日教练提示</h2>
+                <p>开始对话前，可以先准备目标、训练年限、每周训练天数和器械条件，AI 教练会更容易给出可执行建议。</p>
+                <ul class="drill-list">
+                    <li>目标：减脂、增肌、体态改善或体能提升</li>
+                    <li>条件：训练时间、器械、伤病限制</li>
+                    <li>偏好：饮食习惯、恢复状态、动作熟悉度</li>
+                </ul>
+            </aside>
+        </section>
+    </main>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -170,7 +383,6 @@
             const loadingContainer = document.getElementById('loading-container');
             const menuContainer = document.getElementById('menu-container');
 
-            
             let percent = 0;
             let interval = setInterval(() => {
                 percent += 10;
@@ -182,10 +394,9 @@
                         menuContainer.style.display = 'block';
                     }, 300);
                 }
-            }, 200);
+            }, 120);
         });
 
-        // 进入AI服务
         function loadService(path, errorMsg) {
             fetch(path, { method: 'GET', headers: { 'Accept': 'text/html' } })
                 .then(res => res.text())
@@ -193,8 +404,16 @@
                 .catch(() => alert(errorMsg));
         }
 
-        document.getElementById('chat-service').addEventListener('click', () => loadService('/chat', '进入AI聊天服务异常！'));
-        document.getElementById('image-service').addEventListener('click', () => loadService('/upload', '进入AI图像识别服务异常！'));
+        function showComingSoon(featureName) {
+            alert(featureName + ' 即将上线，本轮先保留健身场景入口。');
+        }
+
+        document.getElementById('profile-service').addEventListener('click', () => showComingSoon('我的档案'));
+        document.getElementById('plan-service').addEventListener('click', () => showComingSoon('生成训练计划'));
+        document.getElementById('chat-service').addEventListener('click', () => loadService('/chat', '进入 AI 教练对话异常！'));
+        document.getElementById('record-service').addEventListener('click', () => showComingSoon('训练记录'));
+        document.getElementById('knowledge-service').addEventListener('click', () => showComingSoon('健身知识库'));
+
         document.getElementById('logout').addEventListener('click', () => {
             const userId = sessionStorage.getItem('userId');
             fetch('/user/logout', {
@@ -216,7 +435,6 @@
                 .catch(() => alert('退出登录失败！'));
         });
 
-        // 页面刷新/关闭时自动登出
         window.addEventListener('beforeunload', function () {
             const userId = sessionStorage.getItem('userId');
             if (userId) {
@@ -226,7 +444,6 @@
             }
         });
 
-        // 页面加载时用户检查
         window.addEventListener('load', function () {
             const userId = sessionStorage.getItem('userId');
             if (!userId) {
