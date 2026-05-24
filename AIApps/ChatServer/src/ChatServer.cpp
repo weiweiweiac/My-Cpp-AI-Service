@@ -13,6 +13,7 @@
 #include"../include/handlers/ChatCreateAndSendHandler.h"
 #include"../include/handlers/ChatSessionsHandler.h"
 #include"../include/handlers/ChatSpeechHandler.h"
+#include"../include/handlers/FitnessProfileHandler.h"
 
 #include "../include/ChatServer.h"
 #include "../../../HttpServer/include/http/HttpRequest.h"
@@ -131,6 +132,11 @@ void ChatServer::initializeRouter() {
         resp->setContentLength(body.size());
         resp->setBody(body);
     });
+
+    httpServer_.Get("/fitness/profile",
+        std::make_shared<FitnessProfileHandler>(this, FitnessProfileHandler::Action::GetProfile));
+    httpServer_.Post("/fitness/profile/save",
+        std::make_shared<FitnessProfileHandler>(this, FitnessProfileHandler::Action::SaveProfile));
 
     httpServer_.Get("/", std::make_shared<ChatEntryHandler>(this));
     httpServer_.Get("/entry", std::make_shared<ChatEntryHandler>(this));

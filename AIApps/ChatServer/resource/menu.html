@@ -273,6 +273,123 @@
             color: #d9fff0;
         }
 
+        .profile-panel {
+            display: none;
+            margin-top: 18px;
+            padding: 24px;
+        }
+
+        .profile-panel.is-open {
+            display: block;
+        }
+
+        .profile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .profile-header h2 {
+            margin: 0 0 8px;
+            font-size: 26px;
+        }
+
+        .profile-header p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .profile-status {
+            min-width: 180px;
+            color: var(--green);
+            text-align: right;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .profile-form {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .form-field {
+            display: grid;
+            gap: 7px;
+        }
+
+        .form-field.wide {
+            grid-column: span 2;
+        }
+
+        .form-field.full {
+            grid-column: 1 / -1;
+        }
+
+        .form-field label {
+            color: #c8eadc;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .form-field input,
+        .form-field select,
+        .form-field textarea {
+            width: 100%;
+            min-height: 42px;
+            border: 1px solid rgba(125, 255, 184, 0.24);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: var(--text);
+            background: rgba(2, 12, 10, 0.72);
+            outline: none;
+            font: inherit;
+        }
+
+        .form-field textarea {
+            min-height: 92px;
+            resize: vertical;
+        }
+
+        .form-field input:focus,
+        .form-field select:focus,
+        .form-field textarea:focus {
+            border-color: var(--green);
+            box-shadow: 0 0 0 3px rgba(125, 255, 184, 0.12);
+        }
+
+        .profile-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            grid-column: 1 / -1;
+            margin-top: 4px;
+        }
+
+        .ghost-btn,
+        .save-btn {
+            min-height: 42px;
+            border-radius: 8px;
+            padding: 0 18px;
+            cursor: pointer;
+            font-weight: 800;
+        }
+
+        .ghost-btn {
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .save-btn {
+            border: 1px solid rgba(125, 255, 184, 0.7);
+            color: #06110f;
+            background: linear-gradient(135deg, var(--green), var(--cyan));
+        }
+
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -288,13 +405,27 @@
         @media (max-width: 920px) {
             .dashboard,
             .menu-grid,
-            .status-panel {
+            .status-panel,
+            .profile-form {
                 grid-template-columns: 1fr;
             }
 
             .topline {
                 align-items: flex-start;
                 flex-direction: column;
+            }
+
+            .profile-header {
+                flex-direction: column;
+            }
+
+            .profile-status {
+                min-width: 0;
+                text-align: left;
+            }
+
+            .form-field.wide {
+                grid-column: 1;
             }
         }
     </style>
@@ -375,6 +506,78 @@
                 </ul>
             </aside>
         </section>
+
+        <section class="panel profile-panel" id="profile-panel" aria-label="我的健身档案">
+            <div class="profile-header">
+                <div>
+                    <h2>我的健身档案</h2>
+                    <p>先记录基础身体数据、训练目标和限制条件，后续训练计划会从这里读取你的用户画像。</p>
+                </div>
+                <div class="profile-status" id="profile-status">点击保存后同步到服务器</div>
+            </div>
+
+            <form class="profile-form" id="profile-form">
+                <div class="form-field">
+                    <label for="profile-gender">性别</label>
+                    <select id="profile-gender" name="gender">
+                        <option value="">暂不填写</option>
+                        <option value="male">男</option>
+                        <option value="female">女</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+
+                <div class="form-field">
+                    <label for="profile-age">年龄</label>
+                    <input id="profile-age" name="age" type="number" min="10" max="100" placeholder="例如 23">
+                </div>
+
+                <div class="form-field">
+                    <label for="profile-weekly-days">每周训练天数</label>
+                    <input id="profile-weekly-days" name="weekly_days" type="number" min="0" max="7" placeholder="例如 4">
+                </div>
+
+                <div class="form-field">
+                    <label for="profile-height">身高 cm</label>
+                    <input id="profile-height" name="height_cm" type="number" min="80" max="250" step="0.1" placeholder="例如 175">
+                </div>
+
+                <div class="form-field">
+                    <label for="profile-weight">体重 kg</label>
+                    <input id="profile-weight" name="weight_kg" type="number" min="20" max="300" step="0.1" placeholder="例如 70">
+                </div>
+
+                <div class="form-field">
+                    <label for="profile-level">训练水平</label>
+                    <select id="profile-level" name="training_level">
+                        <option value="">暂不填写</option>
+                        <option value="beginner">初级</option>
+                        <option value="intermediate">中级</option>
+                        <option value="advanced">高级</option>
+                    </select>
+                </div>
+
+                <div class="form-field wide">
+                    <label for="profile-goal">训练目标</label>
+                    <input id="profile-goal" name="goal" maxlength="100" placeholder="例如 增肌、减脂、提升体能">
+                </div>
+
+                <div class="form-field">
+                    <label for="profile-equipment">可用器械/训练环境</label>
+                    <input id="profile-equipment" name="equipment" maxlength="255" placeholder="例如 健身房器械、哑铃、徒手">
+                </div>
+
+                <div class="form-field full">
+                    <label for="profile-injury">伤病或限制说明</label>
+                    <textarea id="profile-injury" name="injury_note" maxlength="1000" placeholder="例如 膝盖不适、腰椎旧伤、避免高冲击动作"></textarea>
+                </div>
+
+                <div class="profile-actions">
+                    <button type="button" class="ghost-btn" id="profile-cancel">收起</button>
+                    <button type="submit" class="save-btn">保存档案</button>
+                </div>
+            </form>
+        </section>
     </main>
 
     <script>
@@ -408,7 +611,110 @@
             alert(featureName + ' 即将上线，本轮先保留健身场景入口。');
         }
 
-        document.getElementById('profile-service').addEventListener('click', () => showComingSoon('我的档案'));
+        const profilePanel = document.getElementById('profile-panel');
+        const profileStatus = document.getElementById('profile-status');
+        const profileForm = document.getElementById('profile-form');
+
+        function setProfileStatus(message, isError = false) {
+            profileStatus.textContent = message;
+            profileStatus.style.color = isError ? 'var(--red)' : 'var(--green)';
+        }
+
+        function fillProfileForm(profile) {
+            document.getElementById('profile-gender').value = profile?.gender || '';
+            document.getElementById('profile-age').value = profile?.age ?? '';
+            document.getElementById('profile-height').value = profile?.height_cm ?? '';
+            document.getElementById('profile-weight').value = profile?.weight_kg ?? '';
+            document.getElementById('profile-goal').value = profile?.goal || '';
+            document.getElementById('profile-level').value = profile?.training_level || '';
+            document.getElementById('profile-weekly-days').value = profile?.weekly_days ?? '';
+            document.getElementById('profile-equipment').value = profile?.equipment || '';
+            document.getElementById('profile-injury').value = profile?.injury_note || '';
+        }
+
+        function handleUnauthorized() {
+            sessionStorage.clear();
+            alert('登录状态已失效，请重新登录。');
+            window.location.href = '/entry';
+        }
+
+        async function loadProfile() {
+            setProfileStatus('正在读取档案...');
+            const res = await fetch('/fitness/profile', { method: 'GET', headers: { 'Accept': 'application/json' } });
+            const data = await res.json().catch(() => ({}));
+
+            if (res.status === 401) {
+                handleUnauthorized();
+                return;
+            }
+            if (!res.ok || data.success === false) {
+                throw new Error(data.message || '读取档案失败');
+            }
+
+            if (data.hasProfile) {
+                fillProfileForm(data.profile);
+                setProfileStatus('已读取服务器档案');
+            } else {
+                fillProfileForm(null);
+                setProfileStatus('还没有档案，填写后保存即可');
+            }
+        }
+
+        function readProfilePayload() {
+            return {
+                gender: document.getElementById('profile-gender').value,
+                age: document.getElementById('profile-age').value,
+                height_cm: document.getElementById('profile-height').value,
+                weight_kg: document.getElementById('profile-weight').value,
+                goal: document.getElementById('profile-goal').value.trim(),
+                training_level: document.getElementById('profile-level').value,
+                weekly_days: document.getElementById('profile-weekly-days').value,
+                equipment: document.getElementById('profile-equipment').value.trim(),
+                injury_note: document.getElementById('profile-injury').value.trim()
+            };
+        }
+
+        async function openProfilePanel() {
+            profilePanel.classList.add('is-open');
+            profilePanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            try {
+                await loadProfile();
+            } catch (err) {
+                setProfileStatus(err.message || '读取档案失败', true);
+            }
+        }
+
+        document.getElementById('profile-service').addEventListener('click', openProfilePanel);
+        document.getElementById('profile-cancel').addEventListener('click', () => {
+            profilePanel.classList.remove('is-open');
+        });
+
+        profileForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            setProfileStatus('正在保存档案...');
+
+            try {
+                const res = await fetch('/fitness/profile/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(readProfilePayload())
+                });
+                const data = await res.json().catch(() => ({}));
+
+                if (res.status === 401) {
+                    handleUnauthorized();
+                    return;
+                }
+                if (!res.ok || data.success === false) {
+                    throw new Error(data.message || '保存档案失败');
+                }
+
+                setProfileStatus(data.message || '健身档案保存成功');
+            } catch (err) {
+                setProfileStatus(err.message || '保存档案失败', true);
+            }
+        });
+
         document.getElementById('plan-service').addEventListener('click', () => showComingSoon('生成训练计划'));
         document.getElementById('chat-service').addEventListener('click', () => loadService('/chat', '进入 AI 教练对话异常！'));
         document.getElementById('record-service').addEventListener('click', () => showComingSoon('训练记录'));
@@ -433,15 +739,6 @@
                     document.close();
                 })
                 .catch(() => alert('退出登录失败！'));
-        });
-
-        window.addEventListener('beforeunload', function () {
-            const userId = sessionStorage.getItem('userId');
-            if (userId) {
-                const data = new Blob([JSON.stringify({ userId: userId, type: 'refresh', gameType: 0 })],
-                    { type: 'application/json' });
-                navigator.sendBeacon('/user/logout', data);
-            }
         });
 
         window.addEventListener('load', function () {

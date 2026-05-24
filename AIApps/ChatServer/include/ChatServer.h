@@ -39,6 +39,7 @@ class AIUploadSendHandler;
 class ChatCreateAndSendHandler;
 class ChatSessionsHandler;
 class ChatSpeechHandler;
+class FitnessProfileHandler;
 
 class ChatServer {
 public:
@@ -64,6 +65,7 @@ private:
 	friend class ChatCreateAndSendHandler;
 	friend class ChatSessionsHandler;
 	friend class ChatSpeechHandler;
+	friend class FitnessProfileHandler;
 
 private:
 	void initialize();
