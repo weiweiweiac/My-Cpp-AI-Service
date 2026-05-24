@@ -7,6 +7,7 @@
 #include <map>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 
 namespace
 {
@@ -437,15 +438,15 @@ void FitnessProfileHandler::handleSaveProfile(const http::HttpRequest& req, http
 
         mysqlUtil_.executeUpdate(sql,
             userId,
-            data.gender,
-            data.age,
-            data.heightCm,
-            data.weightKg,
-            data.goal,
-            data.trainingLevel,
-            data.weeklyDays,
-            data.equipment,
-            data.injuryNote);
+            std::as_const(data.gender),
+            std::as_const(data.age),
+            std::as_const(data.heightCm),
+            std::as_const(data.weightKg),
+            std::as_const(data.goal),
+            std::as_const(data.trainingLevel),
+            std::as_const(data.weeklyDays),
+            std::as_const(data.equipment),
+            std::as_const(data.injuryNote));
 
         json body;
         body["success"] = true;
