@@ -4,6 +4,7 @@
 #include"../include/handlers/ChatHandler.h"
 #include"../include/handlers/ChatEntryHandler.h"
 #include"../include/handlers/ChatSendHandler.h"
+#include"../include/handlers/ChatStreamHandler.h"
 #include"../include/handlers/AIMenuHandler.h"
 #include"../include/handlers/AIUploadSendHandler.h"
 #include"../include/handlers/AIUploadHandler.h"
@@ -20,6 +21,10 @@
 #include "../../../HttpServer/include/http/HttpRequest.h"
 #include "../../../HttpServer/include/http/HttpResponse.h"
 #include "../../../HttpServer/include/http/HttpServer.h"
+
+#include <chrono>
+#include <thread>
+#include <vector>
 
 
 
@@ -134,12 +139,37 @@ void ChatServer::initializeRouter() {
         resp->setBody(body);
     });
 
+    httpServer_.GetStream("/stream/mock", [](const http::HttpRequest& req, http::HttpStreamWriter& writer) {
+        writer.sendSseHeader();
+        writer.sendStatus("mock_started");
+        std::thread([writer]() mutable {
+            const std::vector<std::string> chunks = {
+                "Hello, I am your AI fitness coach.",
+                "Analyzing your training goal.",
+                "Generating a practical suggestion."
+            };
+            for (const auto& chunk : chunks)
+            {
+                writer.sendMessage(chunk);
+                std::this_thread::sleep_for(std::chrono::milliseconds(350));
+            }
+            writer.sendDone();
+            writer.close();
+        }).detach();
+    });
+
     httpServer_.Get("/fitness/profile",
         std::make_shared<FitnessProfileHandler>(this, FitnessProfileHandler::Action::GetProfile));
     httpServer_.Post("/fitness/profile/save",
         std::make_shared<FitnessProfileHandler>(this, FitnessProfileHandler::Action::SaveProfile));
     httpServer_.Post("/fitness/calendar/generate-plan",
         std::make_shared<FitnessCalendarHandler>(this, FitnessCalendarHandler::Action::GeneratePlan));
+    auto fitnessCalendarStreamHandler =
+        std::make_shared<FitnessCalendarHandler>(this, FitnessCalendarHandler::Action::GeneratePlan);
+    httpServer_.PostStream("/fitness/calendar/generate-plan-stream",
+        [fitnessCalendarStreamHandler](const http::HttpRequest& req, http::HttpStreamWriter& writer) {
+            fitnessCalendarStreamHandler->handleGeneratePlanStream(req, writer);
+        });
     httpServer_.Get("/fitness/calendar/list",
         std::make_shared<FitnessCalendarHandler>(this, FitnessCalendarHandler::Action::ListCalendar));
     httpServer_.Get("/fitness/calendar/day",
@@ -163,6 +193,11 @@ void ChatServer::initializeRouter() {
     httpServer_.Get("/chat", std::make_shared<ChatHandler>(this));
 
     httpServer_.Post("/chat/send", std::make_shared<ChatSendHandler>(this));
+    auto chatStreamHandler = std::make_shared<ChatStreamHandler>(this);
+    httpServer_.PostStream("/chat/send-stream",
+        [chatStreamHandler](const http::HttpRequest& req, http::HttpStreamWriter& writer) {
+            chatStreamHandler->handle(req, writer);
+        });
  
     httpServer_.Get("/menu", std::make_shared<AIMenuHandler>(this));
     

@@ -420,6 +420,20 @@
             margin-top: 18px;
         }
 
+        .stream-output {
+            width: 100%;
+            max-height: 260px;
+            margin: 16px 0 0;
+            padding: 14px;
+            border: 1px solid rgba(125, 255, 184, 0.22);
+            border-radius: 8px;
+            color: var(--text);
+            background: rgba(6, 17, 15, 0.78);
+            white-space: pre-wrap;
+            overflow-y: auto;
+            font: 13px/1.65 "Microsoft YaHei", "PingFang SC", sans-serif;
+        }
+
         .calendar-day {
             min-height: 180px;
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -795,6 +809,7 @@
                 </div>
             </div>
 
+            <pre class="stream-output" id="plan-stream-output" hidden></pre>
             <div class="calendar-grid" id="calendar-grid"></div>
 
             <div class="day-layout" id="day-detail" style="display:none;">
@@ -909,6 +924,116 @@
                 throw new Error(data.message || '请求失败');
             }
             return data;
+        }
+
+        function parsePlanSseBlock(block) {
+            let eventName = 'message';
+            const dataLines = [];
+            block.split(/\r?\n/).forEach(line => {
+                if (line.startsWith('event:')) {
+                    eventName = line.slice(6).trim();
+                } else if (line.startsWith('data:')) {
+                    dataLines.push(line.slice(5).trimStart());
+                }
+            });
+            return { event: eventName, data: dataLines.join('\n') };
+        }
+
+        async function readPlanSseStream(response, handlers) {
+            if (!response.ok || !response.body) {
+                throw new Error('stream endpoint unavailable');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                buffer = buffer.replace(/\r\n/g, '\n');
+                let boundary = buffer.indexOf('\n\n');
+                while (boundary !== -1) {
+                    const block = buffer.slice(0, boundary);
+                    buffer = buffer.slice(boundary + 2);
+                    if (block.trim()) {
+                        const evt = parsePlanSseBlock(block);
+                        let payload = {};
+                        try {
+                            payload = JSON.parse(evt.data);
+                        } catch (err) {
+                            payload = { content: evt.data, message: evt.data };
+                        }
+                        if (handlers[evt.event]) {
+                            handlers[evt.event](payload);
+                        }
+                        if (evt.event === 'done') {
+                            return;
+                        }
+                    }
+                    boundary = buffer.indexOf('\n\n');
+                }
+            }
+        }
+
+        function planStreamStatusText(status) {
+            const map = {
+                accepted: 'AI 已接收生成请求...',
+                reading_profile: '正在读取我的档案...',
+                calling_ai: 'AI 正在生成训练计划...',
+                stream_fallback: '流式生成暂不可用，正在切换到同步生成...',
+                writing_calendar: '正在写入训练日历...',
+                complete: '训练计划已生成并写入日历'
+            };
+            return map[status] || status || 'AI 正在生成训练计划...';
+        }
+
+        async function generatePlanStream(startDate, modelType) {
+            const output = document.getElementById('plan-stream-output');
+            output.hidden = false;
+            output.textContent = '';
+
+            const response = await fetch('/fitness/calendar/generate-plan-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ startDate, modelType })
+            });
+
+            let generatedText = '';
+            let calendar = [];
+            let streamError = '';
+
+            await readPlanSseStream(response, {
+                message(payload) {
+                    generatedText += payload.content || '';
+                    output.textContent = generatedText;
+                    output.scrollTop = output.scrollHeight;
+                },
+                status(payload) {
+                    setStatus('calendar-status', planStreamStatusText(payload.message));
+                },
+                calendar(payload) {
+                    calendar = Array.isArray(payload) ? payload : (payload.calendar || []);
+                },
+                error(payload) {
+                    streamError = payload.message || '生成训练计划失败';
+                    setStatus('calendar-status', streamError, true);
+                }
+            });
+
+            if (streamError) {
+                const err = new Error(streamError);
+                err.isBusinessError = true;
+                throw err;
+            }
+
+            return {
+                success: true,
+                message: '训练计划已生成并写入训练日历',
+                calendar
+            };
         }
 
         function handleUnauthorized() {
@@ -1065,6 +1190,21 @@
             button.textContent = '生成中...';
             setStatus('calendar-status', 'AI 正在生成一周训练计划，同步响应可能需要等待...');
             try {
+                try {
+                    const streamed = await generatePlanStream(startDate, modelType);
+                    setStatus('calendar-status', streamed.message || '训练计划已生成');
+                    renderCalendar(streamed.calendar || []);
+                    if ((streamed.calendar || []).length) {
+                        openDay(streamed.calendar[0].calendar_date || streamed.calendar[0].date);
+                    }
+                    return;
+                } catch (streamErr) {
+                    if (streamErr.isBusinessError) {
+                        throw streamErr;
+                    }
+                    console.warn('stream plan generation failed, falling back to sync endpoint', streamErr);
+                }
+
                 const data = await apiFetch('/fitness/calendar/generate-plan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },

@@ -54,6 +54,14 @@ add_executable(http_server
 )
 
 # 链接库
+enable_testing()
+
+add_executable(http_stream_writer_test
+    ${PROJECT_SOURCE_DIR}/tests/http_stream_writer_test.cpp
+)
+
+add_test(NAME http_stream_writer_test COMMAND http_stream_writer_test)
+
 target_link_libraries(http_server
     pthread
     muduo_net

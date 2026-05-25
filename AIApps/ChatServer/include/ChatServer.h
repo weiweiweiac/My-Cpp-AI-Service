@@ -29,6 +29,7 @@ class ChatLogoutHandler;
 class ChatHandler;
 class ChatEntryHandler;
 class ChatSendHandler;
+class ChatStreamHandler;
 class ChatHistoryHandler;
 
 class AIMenuHandler;
@@ -58,6 +59,7 @@ private:
 	friend class ChatHandler;
 	friend class ChatEntryHandler;
 	friend class ChatSendHandler;
+	friend class ChatStreamHandler;
 	friend class AIMenuHandler;
 	friend class AIUploadHandler;
 	friend class AIUploadSendHandler;

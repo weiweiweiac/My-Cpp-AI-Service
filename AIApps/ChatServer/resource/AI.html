@@ -393,6 +393,15 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
+        function updateMessageContent(msgDiv, role, content) {
+            const text = content || '';
+            const safeHtml = DOMPurify.sanitize(marked.parse(text));
+            const escapedContent = text.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+            const label = role === 'user' ? 'You' : 'AI Coach';
+            msgDiv.innerHTML = `<div style="display:flex; align-items:flex-start; gap:10px;"><div style="flex:1;"><b>${label}:</b><br>${safeHtml}</div><button class="tts-btn" onclick="playTTS(\`${escapedContent}\`)">Play</button></div>`;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
         function clearMessages() { chatContainer.innerHTML = ''; }
 
         function renderSessionList() {
@@ -437,6 +446,90 @@
             });
         });
 
+        function parseSseBlock(block) {
+            let eventName = 'message';
+            const dataLines = [];
+            block.split(/\r?\n/).forEach(line => {
+                if (line.startsWith('event:')) {
+                    eventName = line.slice(6).trim();
+                } else if (line.startsWith('data:')) {
+                    dataLines.push(line.slice(5).trimStart());
+                }
+            });
+            return { event: eventName, data: dataLines.join('\n') };
+        }
+
+        async function readSseStream(response, handlers) {
+            if (!response.ok || !response.body) {
+                throw new Error('stream endpoint unavailable');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                buffer = buffer.replace(/\r\n/g, '\n');
+                let boundary = buffer.indexOf('\n\n');
+                while (boundary !== -1) {
+                    const block = buffer.slice(0, boundary);
+                    buffer = buffer.slice(boundary + 2);
+                    if (block.trim()) {
+                        const evt = parseSseBlock(block);
+                        let payload = {};
+                        try {
+                            payload = JSON.parse(evt.data);
+                        } catch (err) {
+                            payload = { content: evt.data, message: evt.data };
+                        }
+
+                        if (handlers[evt.event]) {
+                            handlers[evt.event](payload);
+                        }
+                        if (evt.event === 'done') {
+                            return;
+                        }
+                    }
+                    boundary = buffer.indexOf('\n\n');
+                }
+            }
+        }
+
+        async function sendStreamMessage(question) {
+            appendMessage('assistant', '');
+            const assistantDiv = chatContainer.lastElementChild;
+            let answer = '';
+            let streamError = '';
+
+            const response = await fetch('/chat/send-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, modelType: modelTypeSelect.value, sessionId: currentSessionId })
+            });
+
+            await readSseStream(response, {
+                message(payload) {
+                    answer += payload.content || '';
+                    updateMessageContent(assistantDiv, 'assistant', answer);
+                },
+                status(payload) {
+                    if (!answer) {
+                        updateMessageContent(assistantDiv, 'assistant', payload.message || 'Generating...');
+                    }
+                },
+                error(payload) {
+                    streamError = payload.message || 'stream error';
+                    updateMessageContent(assistantDiv, 'assistant', '[Error] ' + streamError);
+                }
+            });
+
+            return { success: !streamError, content: answer, message: streamError };
+        }
+
         chatForm.addEventListener('submit', async e => {
             e.preventDefault();
             const question = questionInput.value.trim();
@@ -480,6 +573,19 @@
             } else {
                 sessions[currentSessionId].messages.push({ role: 'user', content: question });
                 try {
+                    try {
+                        const streamed = await sendStreamMessage(question);
+                        if (streamed.success) {
+                            sessions[currentSessionId].messages.push({ role: 'assistant', content: streamed.content });
+                            questionInput.value = '';
+                            return;
+                        }
+                        questionInput.value = '';
+                        return;
+                    } catch (streamErr) {
+                        console.warn('stream failed, falling back to sync chat', streamErr);
+                    }
+
                     const response = await fetch('/chat/send', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

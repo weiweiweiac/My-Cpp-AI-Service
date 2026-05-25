@@ -4,6 +4,14 @@
 #include<chrono>
 
 // 构造函数
+struct AIHelper::StreamContext
+{
+    AIStrategy* strategy;
+    StreamCallback onChunk;
+    std::string pending;
+    std::string fullText;
+};
+
 AIHelper::AIHelper() {
     //默认使用阿里云大模型
     strategy = StrategyFactory::instance().create("1");
@@ -118,8 +126,50 @@ std::string AIHelper::chat(int userId,std::string userName, std::string sessionI
 }
 
 // 发送自定义请求体
+std::string AIHelper::chatStream(int userId, std::string userName, std::string sessionId,
+    std::string userQuestion, std::string modelType, StreamCallback onChunk)
+{
+    setStrategy(StrategyFactory::instance().create(modelType));
+
+    if (strategy->isMCPModel || modelType == "3")
+    {
+        std::string answer = chat(userId, userName, sessionId, userQuestion, modelType);
+        if (onChunk && !answer.empty())
+        {
+            onChunk(answer);
+        }
+        return answer;
+    }
+
+    addMessage(userId, userName, true, userQuestion, sessionId);
+    std::string answer;
+    try
+    {
+        json payload = strategy->buildStreamRequest(this->messages);
+        answer = executeCurlStream(payload, onChunk);
+    }
+    catch (const std::exception&)
+    {
+        json response = executeCurl(strategy->buildRequest(this->messages));
+        answer = strategy->parseResponse(response);
+        if (onChunk && !answer.empty())
+        {
+            onChunk(answer);
+        }
+    }
+    if (!answer.empty())
+    {
+        addMessage(userId, userName, false, answer, sessionId);
+    }
+    return answer;
+}
+
 json AIHelper::request(const json& payload) {
     return executeCurl(payload);
+}
+
+std::string AIHelper::requestStream(const json& payload, StreamCallback onChunk) {
+    return executeCurlStream(payload, std::move(onChunk));
 }
 
 std::vector<std::pair<std::string, long long>> AIHelper::GetMessages() {
@@ -169,10 +219,103 @@ json AIHelper::executeCurl(const json& payload) {
 }
 
 // curl 回调函数，把返回的数据写到 string buffer
+std::string AIHelper::executeCurlStream(const json& payload, StreamCallback onChunk)
+{
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        throw std::runtime_error("Failed to initialize curl");
+    }
+
+    StreamContext context;
+    context.strategy = strategy.get();
+    context.onChunk = std::move(onChunk);
+
+    struct curl_slist* headers = nullptr;
+    std::string authHeader = "Authorization: Bearer " + strategy->getApiKey();
+
+    headers = curl_slist_append(headers, authHeader.c_str());
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    headers = curl_slist_append(headers, "Accept: text/event-stream");
+
+    std::string payloadStr = payload.dump();
+
+    curl_easy_setopt(curl, CURLOPT_URL, strategy->getApiUrl().c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payloadStr.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, StreamWriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &context);
+
+    CURLcode res = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK) {
+        throw std::runtime_error("curl_easy_perform() failed: " + std::string(curl_easy_strerror(res)));
+    }
+
+    if (!context.pending.empty())
+    {
+        try
+        {
+            std::string token = context.strategy->parseStreamChunk(context.pending);
+            if (!token.empty())
+            {
+                context.fullText += token;
+                if (context.onChunk)
+                {
+                    context.onChunk(token);
+                }
+            }
+        }
+        catch (...)
+        {
+        }
+    }
+
+    return context.fullText;
+}
+
 size_t AIHelper::WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
     size_t totalSize = size * nmemb;
     std::string* buffer = static_cast<std::string*>(userp);
     buffer->append(static_cast<char*>(contents), totalSize);
+    return totalSize;
+}
+
+size_t AIHelper::StreamWriteCallback(void* contents, size_t size, size_t nmemb, void* userp)
+{
+    size_t totalSize = size * nmemb;
+    StreamContext* context = static_cast<StreamContext*>(userp);
+    context->pending.append(static_cast<char*>(contents), totalSize);
+
+    size_t lineEnd = std::string::npos;
+    while ((lineEnd = context->pending.find('\n')) != std::string::npos)
+    {
+        std::string line = context->pending.substr(0, lineEnd);
+        context->pending.erase(0, lineEnd + 1);
+
+        if (line.rfind("data:", 0) != 0)
+        {
+            continue;
+        }
+
+        try
+        {
+            std::string token = context->strategy->parseStreamChunk(line);
+            if (!token.empty())
+            {
+                context->fullText += token;
+                if (context->onChunk)
+                {
+                    context->onChunk(token);
+                }
+            }
+        }
+        catch (const std::exception&)
+        {
+        }
+    }
+
     return totalSize;
 }
 

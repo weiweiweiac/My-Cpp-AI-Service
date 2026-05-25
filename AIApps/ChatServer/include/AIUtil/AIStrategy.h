@@ -26,8 +26,12 @@ public:
 
     virtual json buildRequest(const std::vector<std::pair<std::string, long long>>& messages) const = 0;
 
+    virtual json buildStreamRequest(const std::vector<std::pair<std::string, long long>>& messages) const;
+
 
     virtual std::string parseResponse(const json& response) const = 0;
+
+    virtual std::string parseStreamChunk(const std::string& chunk) const;
 
     bool isMCPModel = false;
 

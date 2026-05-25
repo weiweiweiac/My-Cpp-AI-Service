@@ -13,6 +13,8 @@
 
 namespace http
 {
+class HttpStreamWriter;
+
 namespace router
 {
 
@@ -24,6 +26,7 @@ class Router
 public:
     using HandlerPtr = std::shared_ptr<RouterHandler>;
     using HandlerCallback = std::function<void(const HttpRequest &, HttpResponse *)>;
+    using StreamHandlerCallback = std::function<void(const HttpRequest &, HttpStreamWriter &)>;
 
     // 路由键（请求方法 + URI）
     struct RouteKey
@@ -58,6 +61,7 @@ public:
 
     // 注册回调函数形式的处理器
     void registerCallback(HttpRequest::Method method, const std::string &path, const HandlerCallback &callback);
+    void registerStreamCallback(HttpRequest::Method method, const std::string &path, const StreamHandlerCallback &callback);
 
     // 注册动态路由处理器
     void addRegexHandler(HttpRequest::Method method, const std::string &path, HandlerPtr handler)
@@ -75,6 +79,8 @@ public:
 
     // 处理请求
     bool route(const HttpRequest &req, HttpResponse *resp);
+    bool isStreamRoute(HttpRequest::Method method, const std::string &path) const;
+    bool routeStream(const HttpRequest &req, HttpStreamWriter &writer);
 
 private:
     std::regex convertToRegex(const std::string &pathPattern)
@@ -114,6 +120,7 @@ private:
 
     std::unordered_map<RouteKey, HandlerPtr, RouteKeyHash>      handlers_;       // 精准匹配
     std::unordered_map<RouteKey, HandlerCallback, RouteKeyHash> callbacks_; // 精准匹配
+    std::unordered_map<RouteKey, StreamHandlerCallback, RouteKeyHash> streamCallbacks_;
     std::vector<RouteHandlerObj>                                regexHandlers_;     // 正则匹配
     std::vector<RouteCallbackObj>                               regexCallbacks_;   // 正则匹配
 };

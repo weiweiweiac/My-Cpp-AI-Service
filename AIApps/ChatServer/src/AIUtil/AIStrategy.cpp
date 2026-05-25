@@ -1,6 +1,61 @@
 #include"../include/AIUtil/AIStrategy.h"
 #include"../include/AIUtil/AIFactory.h"
 
+namespace
+{
+
+std::string trimStreamLine(std::string value)
+{
+    while (!value.empty() && (value.back() == '\r' || value.back() == '\n' || value.back() == ' '))
+    {
+        value.pop_back();
+    }
+    size_t begin = 0;
+    while (begin < value.size() && value[begin] == ' ')
+    {
+        ++begin;
+    }
+    return value.substr(begin);
+}
+
+} // namespace
+
+json AIStrategy::buildStreamRequest(const std::vector<std::pair<std::string, long long>>& messages) const
+{
+    json payload = buildRequest(messages);
+    payload["stream"] = true;
+    return payload;
+}
+
+std::string AIStrategy::parseStreamChunk(const std::string& chunk) const
+{
+    std::string line = trimStreamLine(chunk);
+    const std::string prefix = "data:";
+    if (line.rfind(prefix, 0) == 0)
+    {
+        line = trimStreamLine(line.substr(prefix.size()));
+    }
+    if (line.empty() || line == "[DONE]")
+    {
+        return "";
+    }
+
+    json body = json::parse(line);
+    if (body.contains("choices") && !body["choices"].empty())
+    {
+        const auto& choice = body["choices"][0];
+        if (choice.contains("delta") && choice["delta"].contains("content"))
+        {
+            return choice["delta"]["content"].get<std::string>();
+        }
+        if (choice.contains("message") && choice["message"].contains("content"))
+        {
+            return choice["message"]["content"].get<std::string>();
+        }
+    }
+    return "";
+}
+
 std::string AliyunStrategy::getApiUrl() const {
     return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
 }
