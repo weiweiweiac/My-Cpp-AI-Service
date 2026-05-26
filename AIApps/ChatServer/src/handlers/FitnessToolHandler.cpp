@@ -367,6 +367,7 @@ public:
             bool completed = item.contains("completed") && item["completed"].is_boolean() && item["completed"].get<bool>();
             hasCompleted = hasCompleted || completed;
             int completedValue = completed ? 1 : 0;
+            std::string durationText = durationMinutes == 0 ? "" : std::to_string(durationMinutes);
             mysqlUtil_.executeUpdate(insertSql,
                 userId,
                 calendarId,
@@ -378,7 +379,7 @@ public:
                 std::as_const(rpe),
                 std::as_const(rir),
                 std::as_const(restSeconds),
-                durationMinutes == 0 ? "" : std::to_string(durationMinutes),
+                std::as_const(durationText),
                 completedValue,
                 std::as_const(feelingNote),
                 order++);
