@@ -1,4 +1,5 @@
 #include "../../include/router/Router.h"
+#include "../../include/http/HttpStreamWriter.h"
 #include <muduo/base/Logging.h>
 
 namespace http
@@ -16,6 +17,30 @@ void Router::registerCallback(HttpRequest::Method method, const std::string &pat
 {
     RouteKey key{method, path};
     callbacks_[key] = std::move(callback);
+}
+
+void Router::registerStreamCallback(HttpRequest::Method method, const std::string &path, const StreamHandlerCallback &callback)
+{
+    RouteKey key{method, path};
+    streamCallbacks_[key] = std::move(callback);
+}
+
+bool Router::isStreamRoute(HttpRequest::Method method, const std::string &path) const
+{
+    RouteKey key{method, path};
+    return streamCallbacks_.find(key) != streamCallbacks_.end();
+}
+
+bool Router::routeStream(const HttpRequest &req, HttpStreamWriter &writer)
+{
+    RouteKey key{req.method(), req.path()};
+    auto callbackIt = streamCallbacks_.find(key);
+    if (callbackIt != streamCallbacks_.end())
+    {
+        callbackIt->second(req, writer);
+        return true;
+    }
+    return false;
 }
 
 bool Router::route(const HttpRequest &req, HttpResponse *resp)

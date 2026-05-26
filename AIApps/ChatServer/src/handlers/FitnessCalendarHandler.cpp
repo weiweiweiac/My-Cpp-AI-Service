@@ -11,6 +11,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -764,6 +765,23 @@ json buildDayResponse(http::MysqlUtil& mysqlUtil, int userId, const std::string&
     return body;
 }
 
+json calendarItemsToJson(const std::vector<CalendarItem>& calendarItems)
+{
+    json calendar = json::array();
+    for (const auto& item : calendarItems)
+    {
+        json row;
+        row["calendar_date"] = item.date;
+        row["date"] = item.date;
+        row["title"] = item.title;
+        row["item_type"] = item.itemType;
+        row["status"] = item.status;
+        row["plan_content"] = item.planContent;
+        calendar.push_back(row);
+    }
+    return calendar;
+}
+
 void FitnessCalendarHandler::handleGeneratePlan(const http::HttpRequest& req, http::HttpResponse* resp)
 {
     int userId = 0;
@@ -861,6 +879,136 @@ void FitnessCalendarHandler::handleGeneratePlan(const http::HttpRequest& req, ht
         body["message"] = std::string("生成训练计划失败: ") + e.what();
         sendJson(req, resp, http::HttpResponse::k500InternalServerError, "Internal Server Error", body, true);
     }
+}
+
+void FitnessCalendarHandler::handleGeneratePlanStream(const http::HttpRequest& req, http::HttpStreamWriter& writer)
+{
+    writer.sendSseHeader();
+
+    http::HttpResponse sessionResp(false);
+    auto session = server_->getSessionManager()->getSession(req, &sessionResp);
+    if (session->getValue("isLoggedIn") != "true")
+    {
+        writer.sendError("请先登录");
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    int userId = 0;
+    try
+    {
+        userId = std::stoi(session->getValue("userId"));
+    }
+    catch (const std::exception&)
+    {
+        writer.sendError("登录状态异常，请重新登录");
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    json requestBody = json::object();
+    std::string errorMessage;
+    if (!parseRequestJson(req, requestBody, errorMessage, true))
+    {
+        writer.sendError(errorMessage);
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    std::string startDate = getJsonString(requestBody, "startDate");
+    if (startDate.empty())
+    {
+        startDate = todayDate();
+    }
+
+    if (!validateDateField(startDate, "startDate", errorMessage))
+    {
+        writer.sendError(errorMessage);
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    std::string modelType = normalizeModelType(getJsonString(requestBody, "modelType"));
+    writer.sendStatus("accepted");
+
+    std::thread([writer, userId, startDate, modelType]() mutable {
+        try
+        {
+            http::MysqlUtil mysqlUtil;
+
+            writer.sendStatus("reading_profile");
+            ProfileData profile;
+            if (!loadProfile(mysqlUtil, userId, profile))
+            {
+                writer.sendError("请先填写我的档案，再生成训练计划");
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
+            writer.sendStatus("calling_ai");
+            std::string prompt = buildPrompt(profile, startDate);
+            auto strategy = StrategyFactory::instance().create(modelType);
+            AIHelper helper;
+            helper.setStrategy(strategy);
+            std::vector<std::pair<std::string, long long>> messages = {{ prompt, 0 }};
+
+            std::string aiText;
+            try
+            {
+                aiText = helper.requestStream(
+                    strategy->buildStreamRequest(messages),
+                    [&writer](const std::string& chunk) {
+                        writer.sendMessage(chunk);
+                    });
+            }
+            catch (const std::exception&)
+            {
+                writer.sendStatus("stream_fallback");
+            }
+            aiText = trim(aiText);
+
+            if (aiText.empty())
+            {
+                json aiResponse = helper.request(strategy->buildRequest(messages));
+                aiText = trim(strategy->parseResponse(aiResponse));
+                if (!aiText.empty())
+                {
+                    writer.sendMessage(aiText);
+                }
+            }
+
+            if (aiText.empty())
+            {
+                writer.sendError("AI 未返回可用训练计划");
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
+            writer.sendStatus("writing_calendar");
+            auto calendarItems = parseCalendarItems(aiText, startDate, profile.weeklyDays);
+            std::string profileSnapshot = profile.snapshot.dump();
+            for (const auto& item : calendarItems)
+            {
+                upsertCalendarItem(mysqlUtil, userId, item, modelType, profileSnapshot);
+            }
+
+            writer.sendEvent("calendar", calendarItemsToJson(calendarItems).dump());
+            writer.sendStatus("complete");
+            writer.sendDone();
+        }
+        catch (const std::exception& e)
+        {
+            writer.sendError(std::string("生成训练计划失败: ") + e.what());
+            writer.sendDone();
+        }
+        writer.close();
+    }).detach();
 }
 
 void FitnessCalendarHandler::handleListCalendar(const http::HttpRequest& req, http::HttpResponse* resp)

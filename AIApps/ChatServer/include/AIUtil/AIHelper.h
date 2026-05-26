@@ -5,6 +5,7 @@
 #include <curl/curl.h>
 #include <iostream>
 #include <sstream>
+#include <functional>
 
 #include "../../../../HttpServer/include/utils/JsonUtil.h"
 #include"../../../../HttpServer/include/utils/MysqlUtil.h"
@@ -17,6 +18,8 @@
 //这边封装curl去访问对阿里的模型
 class AIHelper {
 public:
+    using StreamCallback = std::function<void(const std::string& chunk)>;
+
     // 构造函数，初始化API Key
     AIHelper();
 
@@ -33,9 +36,12 @@ public:
     // 发送聊天消息，返回AI的响应内容
     // messages: [{"role":"system","content":"..."}, {"role":"user","content":"..."}]
     std::string chat(int userId, std::string userName, std::string sessionId, std::string userQuestion, std::string modelType);
+    std::string chatStream(int userId, std::string userName, std::string sessionId,
+        std::string userQuestion, std::string modelType, StreamCallback onChunk);
 
     // 可选：发送自定义请求体
     json request(const json& payload);
+    std::string requestStream(const json& payload, StreamCallback onChunk);
 
     std::vector<std::pair<std::string, long long>> GetMessages();
 
@@ -47,8 +53,12 @@ private:
 
     // 内部方法：执行curl请求，返回原始JSON
     json executeCurl(const json& payload);
+    std::string executeCurlStream(const json& payload, StreamCallback onChunk);
     // curl 回调函数，把返回的数据写到 string buffer
     static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp);
+    static size_t StreamWriteCallback(void* contents, size_t size, size_t nmemb, void* userp);
+
+    struct StreamContext;
 
 private:
 

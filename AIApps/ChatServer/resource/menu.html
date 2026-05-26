@@ -322,10 +322,18 @@
 
         .profile-form,
         .plan-controls,
-        .record-summary {
+        .record-summary,
+        .knowledge-grid,
+        .tool-grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 14px;
+        }
+
+        .knowledge-grid,
+        .tool-grid {
+            align-items: start;
+            margin-top: 12px;
         }
 
         .form-field {
@@ -418,6 +426,20 @@
             grid-template-columns: repeat(7, minmax(0, 1fr));
             gap: 10px;
             margin-top: 18px;
+        }
+
+        .stream-output {
+            width: 100%;
+            max-height: 260px;
+            margin: 16px 0 0;
+            padding: 14px;
+            border: 1px solid rgba(125, 255, 184, 0.22);
+            border-radius: 8px;
+            color: var(--text);
+            background: rgba(6, 17, 15, 0.78);
+            white-space: pre-wrap;
+            overflow-y: auto;
+            font: 13px/1.65 "Microsoft YaHei", "PingFang SC", sans-serif;
         }
 
         .calendar-day {
@@ -573,6 +595,38 @@
             font-weight: 800;
         }
 
+        .tool-output,
+        .result-list {
+            width: 100%;
+            min-height: 120px;
+            max-height: 320px;
+            margin: 12px 0 0;
+            padding: 14px;
+            border: 1px solid rgba(125, 255, 184, 0.2);
+            border-radius: 8px;
+            color: #dfffee;
+            background: rgba(2, 12, 10, 0.72);
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-y: auto;
+            font: 13px/1.65 "Microsoft YaHei", "PingFang SC", sans-serif;
+        }
+
+        .result-item {
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .result-item:last-child {
+            border-bottom: 0;
+        }
+
+        .result-item strong {
+            display: block;
+            color: var(--green);
+            margin-bottom: 6px;
+        }
+
         .muted {
             color: var(--muted);
         }
@@ -606,7 +660,9 @@
             .status-panel,
             .profile-form,
             .plan-controls,
-            .record-summary {
+            .record-summary,
+            .knowledge-grid,
+            .tool-grid {
                 grid-template-columns: 1fr;
             }
 
@@ -689,7 +745,12 @@
                 <div class="menu-option" id="knowledge-service">
                     <span class="option-code">KNOW</span>
                     <h2>健身知识库</h2>
-                    <p>动作要点、恢复原则和常见训练问题后续接入 RAG。</p>
+                    <p>导入文本、检索片段，并用 RAG 让 AI 教练基于知识库回答。</p>
+                </div>
+                <div class="menu-option" id="tool-service">
+                    <span class="option-code">TOOLS</span>
+                    <h2>健身工具</h2>
+                    <p>BMI、BMR、TDEE、训练容量和训练日历查询工具。</p>
                 </div>
             </div>
 
@@ -795,6 +856,7 @@
                 </div>
             </div>
 
+            <pre class="stream-output" id="plan-stream-output" hidden></pre>
             <div class="calendar-grid" id="calendar-grid"></div>
 
             <div class="day-layout" id="day-detail" style="display:none;">
@@ -840,10 +902,126 @@
             </div>
             <div class="record-list-box" id="records-list"></div>
         </section>
+
+        <section class="panel workspace-panel" id="knowledge-panel" aria-label="健身知识库">
+            <div class="panel-header">
+                <div>
+                    <h2>健身知识库</h2>
+                    <p>粘贴健身知识文本后，系统会在本地切片、生成轻量向量并保存到 JSON VectorStore。</p>
+                </div>
+                <div class="status-text" id="knowledge-status">等待导入或检索</div>
+            </div>
+
+            <div class="knowledge-grid">
+                <div class="record-box">
+                    <h3>知识导入</h3>
+                    <div class="form-field">
+                        <label for="rag-title">标题</label>
+                        <input id="rag-title" placeholder="卧推动作要点">
+                    </div>
+                    <div class="form-field">
+                        <label for="rag-source">来源</label>
+                        <input id="rag-source" placeholder="manual" value="manual">
+                    </div>
+                    <div class="form-field">
+                        <label for="rag-content">内容</label>
+                        <textarea id="rag-content" placeholder="粘贴 20 字以上的健身知识文本"></textarea>
+                    </div>
+                    <div class="actions" style="justify-content:flex-start;">
+                        <button type="button" class="save-btn" id="rag-index-btn">导入知识</button>
+                    </div>
+                    <pre class="tool-output" id="rag-index-output"></pre>
+                </div>
+
+                <div class="record-box">
+                    <h3>知识搜索</h3>
+                    <div class="form-field">
+                        <label for="rag-query">搜索问题</label>
+                        <input id="rag-query" placeholder="卧推肩膀疼怎么办">
+                    </div>
+                    <div class="form-field">
+                        <label for="rag-search-topk">TopK</label>
+                        <input id="rag-search-topk" type="number" min="1" max="10" value="5">
+                    </div>
+                    <div class="actions" style="justify-content:flex-start;">
+                        <button type="button" class="save-btn" id="rag-search-btn">搜索</button>
+                    </div>
+                    <div class="result-list" id="rag-search-results"></div>
+                </div>
+
+                <div class="record-box">
+                    <h3>RAG 问答</h3>
+                    <div class="form-field">
+                        <label for="rag-question">问题</label>
+                        <textarea id="rag-question" placeholder="卧推肩膀疼怎么办？"></textarea>
+                    </div>
+                    <div class="form-field">
+                        <label for="rag-answer-topk">TopK</label>
+                        <input id="rag-answer-topk" type="number" min="1" max="10" value="5">
+                    </div>
+                    <div class="actions" style="justify-content:flex-start;">
+                        <button type="button" class="save-btn" id="rag-answer-btn">RAG 问答</button>
+                    </div>
+                    <pre class="tool-output" id="rag-answer-output"></pre>
+                    <div class="result-list" id="rag-answer-references"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel workspace-panel" id="tools-panel" aria-label="健身工具">
+            <div class="panel-header">
+                <div>
+                    <h2>健身工具</h2>
+                    <p>工具调用使用项目内部 Registry，输入输出都是 JSON，并可交给 AI 教练二次总结。</p>
+                </div>
+                <div class="status-text" id="tools-status">等待工具调用</div>
+            </div>
+
+            <div class="tool-grid">
+                <div class="record-box">
+                    <h3>工具列表</h3>
+                    <div class="actions" style="justify-content:flex-start;">
+                        <button type="button" class="save-btn" id="load-tools-btn">读取工具列表</button>
+                    </div>
+                    <div class="result-list" id="tools-list"></div>
+                </div>
+
+                <div class="record-box">
+                    <h3>直接调用</h3>
+                    <div class="form-field">
+                        <label for="tool-name">工具名</label>
+                        <input id="tool-name" value="calculate_bmi">
+                    </div>
+                    <div class="form-field">
+                        <label for="tool-arguments">arguments JSON</label>
+                        <textarea id="tool-arguments">{
+  "heightCm": 175,
+  "weightKg": 70
+}</textarea>
+                    </div>
+                    <div class="actions" style="justify-content:flex-start;">
+                        <button type="button" class="save-btn" id="call-tool-btn">调用工具</button>
+                    </div>
+                    <pre class="tool-output" id="tool-call-output"></pre>
+                </div>
+
+                <div class="record-box">
+                    <h3>工具问答</h3>
+                    <div class="form-field">
+                        <label for="tool-question">问题</label>
+                        <textarea id="tool-question" placeholder="我今天该练什么？"></textarea>
+                    </div>
+                    <div class="actions" style="justify-content:flex-start;">
+                        <button type="button" class="save-btn" id="tool-answer-btn">工具问答</button>
+                    </div>
+                    <pre class="tool-output" id="tool-answer-output"></pre>
+                </div>
+            </div>
+        </section>
     </main>
 
     <script>
-        const panels = ['profile-panel', 'calendar-panel', 'records-panel'];
+        const panels = ['profile-panel', 'calendar-panel', 'records-panel', 'knowledge-panel', 'tools-panel'];
         let activeCalendar = [];
         let currentDate = '';
         let currentCalendarId = null;
@@ -911,6 +1089,116 @@
             return data;
         }
 
+        function parsePlanSseBlock(block) {
+            let eventName = 'message';
+            const dataLines = [];
+            block.split(/\r?\n/).forEach(line => {
+                if (line.startsWith('event:')) {
+                    eventName = line.slice(6).trim();
+                } else if (line.startsWith('data:')) {
+                    dataLines.push(line.slice(5).trimStart());
+                }
+            });
+            return { event: eventName, data: dataLines.join('\n') };
+        }
+
+        async function readPlanSseStream(response, handlers) {
+            if (!response.ok || !response.body) {
+                throw new Error('stream endpoint unavailable');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                buffer = buffer.replace(/\r\n/g, '\n');
+                let boundary = buffer.indexOf('\n\n');
+                while (boundary !== -1) {
+                    const block = buffer.slice(0, boundary);
+                    buffer = buffer.slice(boundary + 2);
+                    if (block.trim()) {
+                        const evt = parsePlanSseBlock(block);
+                        let payload = {};
+                        try {
+                            payload = JSON.parse(evt.data);
+                        } catch (err) {
+                            payload = { content: evt.data, message: evt.data };
+                        }
+                        if (handlers[evt.event]) {
+                            handlers[evt.event](payload);
+                        }
+                        if (evt.event === 'done') {
+                            return;
+                        }
+                    }
+                    boundary = buffer.indexOf('\n\n');
+                }
+            }
+        }
+
+        function planStreamStatusText(status) {
+            const map = {
+                accepted: 'AI 已接收生成请求...',
+                reading_profile: '正在读取我的档案...',
+                calling_ai: 'AI 正在生成训练计划...',
+                stream_fallback: '流式生成暂不可用，正在切换到同步生成...',
+                writing_calendar: '正在写入训练日历...',
+                complete: '训练计划已生成并写入日历'
+            };
+            return map[status] || status || 'AI 正在生成训练计划...';
+        }
+
+        async function generatePlanStream(startDate, modelType) {
+            const output = document.getElementById('plan-stream-output');
+            output.hidden = false;
+            output.textContent = '';
+
+            const response = await fetch('/fitness/calendar/generate-plan-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ startDate, modelType })
+            });
+
+            let generatedText = '';
+            let calendar = [];
+            let streamError = '';
+
+            await readPlanSseStream(response, {
+                message(payload) {
+                    generatedText += payload.content || '';
+                    output.textContent = generatedText;
+                    output.scrollTop = output.scrollHeight;
+                },
+                status(payload) {
+                    setStatus('calendar-status', planStreamStatusText(payload.message));
+                },
+                calendar(payload) {
+                    calendar = Array.isArray(payload) ? payload : (payload.calendar || []);
+                },
+                error(payload) {
+                    streamError = payload.message || '生成训练计划失败';
+                    setStatus('calendar-status', streamError, true);
+                }
+            });
+
+            if (streamError) {
+                const err = new Error(streamError);
+                err.isBusinessError = true;
+                throw err;
+            }
+
+            return {
+                success: true,
+                message: '训练计划已生成并写入训练日历',
+                calendar
+            };
+        }
+
         function handleUnauthorized() {
             sessionStorage.clear();
             alert('登录状态已失效，请重新登录。');
@@ -924,8 +1212,8 @@
                 .catch(() => alert(errorMsg));
         }
 
-        function showComingSoon(featureName) {
-            alert(featureName + ' 即将上线，后续会接入知识库检索。');
+        function formatJson(data) {
+            return JSON.stringify(data, null, 2);
         }
 
         function valueOr(value, fallback) {
@@ -1065,6 +1353,21 @@
             button.textContent = '生成中...';
             setStatus('calendar-status', 'AI 正在生成一周训练计划，同步响应可能需要等待...');
             try {
+                try {
+                    const streamed = await generatePlanStream(startDate, modelType);
+                    setStatus('calendar-status', streamed.message || '训练计划已生成');
+                    renderCalendar(streamed.calendar || []);
+                    if ((streamed.calendar || []).length) {
+                        openDay(streamed.calendar[0].calendar_date || streamed.calendar[0].date);
+                    }
+                    return;
+                } catch (streamErr) {
+                    if (streamErr.isBusinessError) {
+                        throw streamErr;
+                    }
+                    console.warn('stream plan generation failed, falling back to sync endpoint', streamErr);
+                }
+
                 const data = await apiFetch('/fitness/calendar/generate-plan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -1261,6 +1564,165 @@
             `;
         }
 
+        function renderResultList(targetId, results) {
+            const box = document.getElementById(targetId);
+            if (!results || !results.length) {
+                box.innerHTML = '<p class="muted">暂无结果。</p>';
+                return;
+            }
+            box.innerHTML = results.map(item => `
+                <div class="result-item">
+                    <strong>${escapeHtml(item.title || item.name || '结果')}</strong>
+                    <div class="muted">${escapeHtml(item.source ? `来源：${item.source}` : (item.description || ''))}</div>
+                    ${item.score !== undefined ? `<div class="muted">score: ${Number(item.score).toFixed(4)}</div>` : ''}
+                    <div>${escapeHtml(item.content || '')}</div>
+                </div>
+            `).join('');
+        }
+
+        function openKnowledgePanel() {
+            showPanel('knowledge-panel');
+            setStatus('knowledge-status', '可以导入、搜索或发起 RAG 问答');
+        }
+
+        async function indexKnowledge() {
+            setStatus('knowledge-status', '正在导入知识...');
+            try {
+                const data = await apiFetch('/rag/index', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        title: document.getElementById('rag-title').value.trim(),
+                        source: document.getElementById('rag-source').value.trim(),
+                        content: document.getElementById('rag-content').value.trim()
+                    })
+                });
+                document.getElementById('rag-index-output').textContent = formatJson(data);
+                setStatus('knowledge-status', data.message || '知识导入成功');
+            } catch (err) {
+                document.getElementById('rag-index-output').textContent = err.message || '导入失败';
+                setStatus('knowledge-status', err.message || '导入失败', true);
+            }
+        }
+
+        async function searchKnowledge() {
+            setStatus('knowledge-status', '正在检索知识库...');
+            try {
+                const data = await apiFetch('/rag/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        query: document.getElementById('rag-query').value.trim(),
+                        topK: Number(document.getElementById('rag-search-topk').value || 5)
+                    })
+                });
+                renderResultList('rag-search-results', data.results || []);
+                setStatus('knowledge-status', data.message || '检索完成');
+            } catch (err) {
+                renderResultList('rag-search-results', []);
+                setStatus('knowledge-status', err.message || '检索失败', true);
+            }
+        }
+
+        async function askRag() {
+            setStatus('knowledge-status', '正在进行 RAG 问答...');
+            document.getElementById('rag-answer-output').textContent = '';
+            try {
+                const data = await apiFetch('/chat/rag-send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        question: document.getElementById('rag-question').value.trim(),
+                        topK: Number(document.getElementById('rag-answer-topk').value || 5)
+                    })
+                });
+                document.getElementById('rag-answer-output').textContent = data.answer || '';
+                renderResultList('rag-answer-references', data.retrievedChunks || []);
+                setStatus('knowledge-status', 'RAG 问答完成');
+            } catch (err) {
+                document.getElementById('rag-answer-output').textContent = err.message || 'RAG 问答失败';
+                renderResultList('rag-answer-references', []);
+                setStatus('knowledge-status', err.message || 'RAG 问答失败', true);
+            }
+        }
+
+        async function openToolsPanel() {
+            showPanel('tools-panel');
+            try {
+                await loadTools();
+            } catch (err) {
+                setStatus('tools-status', err.message || '读取工具列表失败', true);
+            }
+        }
+
+        async function loadTools() {
+            setStatus('tools-status', '正在读取工具列表...');
+            const data = await apiFetch('/fitness/tools/list');
+            const tools = data.tools || [];
+            const box = document.getElementById('tools-list');
+            if (!tools.length) {
+                box.innerHTML = '<p class="muted">暂无可用工具。</p>';
+            } else {
+                box.innerHTML = tools.map(tool => `
+                    <div class="result-item">
+                        <strong>${escapeHtml(tool.name)}</strong>
+                        <div>${escapeHtml(tool.description || '')}</div>
+                        <div class="muted">${tool.requiresUserData ? '需要登录用户数据' : '可直接计算'}</div>
+                    </div>
+                `).join('');
+            }
+            setStatus('tools-status', '工具列表已加载');
+        }
+
+        function readToolArguments() {
+            const raw = document.getElementById('tool-arguments').value.trim();
+            if (!raw) {
+                return {};
+            }
+            return JSON.parse(raw);
+        }
+
+        async function callFitnessTool() {
+            setStatus('tools-status', '正在调用工具...');
+            try {
+                const data = await apiFetch('/fitness/tool/call', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        toolName: document.getElementById('tool-name').value.trim(),
+                        arguments: readToolArguments()
+                    })
+                });
+                document.getElementById('tool-call-output').textContent = formatJson(data);
+                setStatus('tools-status', '工具调用完成');
+            } catch (err) {
+                document.getElementById('tool-call-output').textContent = err.message || '工具调用失败';
+                setStatus('tools-status', err.message || '工具调用失败', true);
+            }
+        }
+
+        async function askFitnessTool() {
+            setStatus('tools-status', '正在执行工具问答...');
+            try {
+                const data = await apiFetch('/chat/fitness-tool-send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        question: document.getElementById('tool-question').value.trim()
+                    })
+                });
+                document.getElementById('tool-answer-output').textContent = formatJson({
+                    answer: data.answer,
+                    toolName: data.toolName,
+                    toolResult: data.toolResult
+                });
+                setStatus('tools-status', '工具问答完成');
+            } catch (err) {
+                document.getElementById('tool-answer-output').textContent = err.message || '工具问答失败';
+                setStatus('tools-status', err.message || '工具问答失败', true);
+            }
+        }
+
         function escapeHtml(value) {
             return String(value).replace(/[&<>"']/g, function (ch) {
                 return {
@@ -1324,7 +1786,14 @@
 
         document.getElementById('chat-service').addEventListener('click', () => loadService('/chat', '进入 AI 教练对话异常！'));
         document.getElementById('record-service').addEventListener('click', loadRecords);
-        document.getElementById('knowledge-service').addEventListener('click', () => showComingSoon('健身知识库'));
+        document.getElementById('knowledge-service').addEventListener('click', openKnowledgePanel);
+        document.getElementById('tool-service').addEventListener('click', openToolsPanel);
+        document.getElementById('rag-index-btn').addEventListener('click', indexKnowledge);
+        document.getElementById('rag-search-btn').addEventListener('click', searchKnowledge);
+        document.getElementById('rag-answer-btn').addEventListener('click', askRag);
+        document.getElementById('load-tools-btn').addEventListener('click', loadTools);
+        document.getElementById('call-tool-btn').addEventListener('click', callFitnessTool);
+        document.getElementById('tool-answer-btn').addEventListener('click', askFitnessTool);
 
         document.getElementById('logout').addEventListener('click', () => {
             const userId = sessionStorage.getItem('userId');

@@ -147,6 +147,13 @@ void HttpServer::onRequest(const muduo::net::TcpConnectionPtr &conn, const HttpR
     const std::string &connection = req.getHeader("Connection");
     bool close = ((connection == "close") ||
                   (req.getVersion() == "HTTP/1.0" && connection != "Keep-Alive"));
+
+    if (router_.isStreamRoute(req.method(), req.path()))
+    {
+        handleStreamRequest(conn, req);
+        return;
+    }
+
     HttpResponse response(close);
 
     // 根据请求报文信息来封装响应报文对象
@@ -167,6 +174,47 @@ void HttpServer::onRequest(const muduo::net::TcpConnectionPtr &conn, const HttpR
 }
 
 // 执行请求对应的路由处理函数
+void HttpServer::handleStreamRequest(const muduo::net::TcpConnectionPtr& conn, const HttpRequest& req)
+{
+    try
+    {
+        HttpRequest mutableReq = req;
+        middlewareChain_.processBefore(mutableReq);
+
+        HttpStreamWriter writer(conn);
+        if (!router_.routeStream(mutableReq, writer))
+        {
+            const std::string body = "Not Found";
+            conn->send("HTTP/1.1 404 Not Found\r\n"
+                       "Connection: close\r\n"
+                       "Content-Type: text/plain\r\n"
+                       "Content-Length: " + std::to_string(body.size()) + "\r\n"
+                       "\r\n" + body);
+            conn->shutdown();
+        }
+    }
+    catch (const HttpResponse& res)
+    {
+        muduo::net::Buffer buf;
+        res.appendToBuffer(&buf);
+        conn->send(&buf);
+        if (res.closeConnection())
+        {
+            conn->shutdown();
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::string body = e.what();
+        conn->send("HTTP/1.1 500 Internal Server Error\r\n"
+                   "Connection: close\r\n"
+                   "Content-Type: text/plain\r\n"
+                   "Content-Length: " + std::to_string(body.size()) + "\r\n"
+                   "\r\n" + body);
+        conn->shutdown();
+    }
+}
+
 void HttpServer::handleRequest(const HttpRequest &req, HttpResponse *resp)
 {
     try

@@ -29,6 +29,7 @@ class ChatLogoutHandler;
 class ChatHandler;
 class ChatEntryHandler;
 class ChatSendHandler;
+class ChatStreamHandler;
 class ChatHistoryHandler;
 
 class AIMenuHandler;
@@ -41,6 +42,8 @@ class ChatSessionsHandler;
 class ChatSpeechHandler;
 class FitnessProfileHandler;
 class FitnessCalendarHandler;
+class FitnessRagHandler;
+class FitnessToolHandler;
 
 class ChatServer {
 public:
@@ -58,6 +61,7 @@ private:
 	friend class ChatHandler;
 	friend class ChatEntryHandler;
 	friend class ChatSendHandler;
+	friend class ChatStreamHandler;
 	friend class AIMenuHandler;
 	friend class AIUploadHandler;
 	friend class AIUploadSendHandler;
@@ -68,6 +72,8 @@ private:
 	friend class ChatSpeechHandler;
 	friend class FitnessProfileHandler;
 	friend class FitnessCalendarHandler;
+	friend class FitnessRagHandler;
+	friend class FitnessToolHandler;
 
 private:
 	void initialize();

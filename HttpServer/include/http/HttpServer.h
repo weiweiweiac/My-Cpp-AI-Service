@@ -17,6 +17,7 @@
 #include "HttpContext.h"
 #include "HttpRequest.h"
 #include "HttpResponse.h"
+#include "HttpStreamWriter.h"
 #include "../router/Router.h"
 #include "../session/SessionManager.h"
 #include "../middleware/MiddlewareChain.h"
@@ -34,6 +35,7 @@ class HttpServer : muduo::noncopyable
 {
 public:
     using HttpCallback = std::function<void (const http::HttpRequest&, http::HttpResponse*)>;
+    using StreamHttpCallback = std::function<void (const http::HttpRequest&, http::HttpStreamWriter&)>;
     
     // 构造函数
     HttpServer(int port,
@@ -78,6 +80,16 @@ public:
     void Post(const std::string& path, router::Router::HandlerPtr handler)
     {
         router_.registerHandler(HttpRequest::kPost, path, handler);
+    }
+
+    void GetStream(const std::string& path, const StreamHttpCallback& cb)
+    {
+        router_.registerStreamCallback(HttpRequest::kGet, path, cb);
+    }
+
+    void PostStream(const std::string& path, const StreamHttpCallback& cb)
+    {
+        router_.registerStreamCallback(HttpRequest::kPost, path, cb);
     }
 
     // 注册动态路由处理器
@@ -127,6 +139,7 @@ private:
     void onRequest(const muduo::net::TcpConnectionPtr&, const HttpRequest&);
 
     void handleRequest(const HttpRequest& req, HttpResponse* resp);
+    void handleStreamRequest(const muduo::net::TcpConnectionPtr& conn, const HttpRequest& req);
     
 private:
     muduo::net::InetAddress                      listenAddr_; // 监听地址
