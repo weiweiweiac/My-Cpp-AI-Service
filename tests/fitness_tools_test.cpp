@@ -73,5 +73,13 @@ int main()
     require(service.matchToolName("帮我记录一下今天训练") == "save_training_record",
         "Tool matching should route structured save intent");
 
+    require(service.matchToolName("我 BMI 多少") == "calculate_bmi",
+        "Tool matching should route concrete BMI questions");
+    require(service.matchToolName("我今天该练什么") == "get_today_training_plan",
+        "Tool matching should route concrete today training questions");
+    std::string recentTool = service.matchToolName("最近训练怎么样");
+    require(recentTool == "summarize_recent_training" || recentTool == "get_recent_training_records",
+        "Tool matching should route concrete recent training questions");
+
     return 0;
 }

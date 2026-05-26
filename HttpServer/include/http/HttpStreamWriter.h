@@ -51,6 +51,11 @@ public:
         return "{\"" + jsonEscape(key) + "\":\"" + jsonEscape(value) + "\"}";
     }
 
+    static std::string doneData()
+    {
+        return jsonData("message", "完成");
+    }
+
     static std::string jsonEscape(const std::string& value)
     {
         std::string escaped;

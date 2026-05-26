@@ -189,6 +189,12 @@ void ChatServer::initializeRouter() {
         std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::Search));
     httpServer_.Post("/chat/rag-send",
         std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::ChatRag));
+    auto fitnessRagStreamHandler =
+        std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::ChatRag);
+    httpServer_.PostStream("/chat/rag-send-stream",
+        [fitnessRagStreamHandler](const http::HttpRequest& req, http::HttpStreamWriter& writer) {
+            fitnessRagStreamHandler->handleChatRagStream(req, writer);
+        });
 
     httpServer_.Get("/fitness/tools/list",
         std::make_shared<FitnessToolHandler>(this, FitnessToolHandler::Action::ListTools));
@@ -196,6 +202,12 @@ void ChatServer::initializeRouter() {
         std::make_shared<FitnessToolHandler>(this, FitnessToolHandler::Action::CallTool));
     httpServer_.Post("/chat/fitness-tool-send",
         std::make_shared<FitnessToolHandler>(this, FitnessToolHandler::Action::ChatToolSend));
+    auto fitnessToolStreamHandler =
+        std::make_shared<FitnessToolHandler>(this, FitnessToolHandler::Action::ChatToolSend);
+    httpServer_.PostStream("/chat/fitness-tool-send-stream",
+        [fitnessToolStreamHandler](const http::HttpRequest& req, http::HttpStreamWriter& writer) {
+            fitnessToolStreamHandler->handleChatToolSendStream(req, writer);
+        });
 
     httpServer_.Get("/", std::make_shared<ChatEntryHandler>(this));
     httpServer_.Get("/entry", std::make_shared<ChatEntryHandler>(this));

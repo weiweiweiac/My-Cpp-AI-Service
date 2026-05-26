@@ -1089,22 +1089,52 @@
             return data;
         }
 
-        function parsePlanSseBlock(block) {
+        function parseSseBlock(block) {
             let eventName = 'message';
             const dataLines = [];
-            block.split(/\r?\n/).forEach(line => {
-                if (line.startsWith('event:')) {
+            const lines = block.split(/\r?\n/);
+            for (let i = 0; i < lines.length; i += 1) {
+                let line = lines[i];
+                if (line.indexOf('event:') === 0) {
                     eventName = line.slice(6).trim();
-                } else if (line.startsWith('data:')) {
-                    dataLines.push(line.slice(5).trimStart());
+                } else if (line.indexOf('data:') === 0) {
+                    let dataLine = line.slice(5);
+                    while (dataLine.charAt(0) === ' ') {
+                        dataLine = dataLine.slice(1);
+                    }
+                    dataLines.push(dataLine);
                 }
-            });
+            }
             return { event: eventName, data: dataLines.join('\n') };
         }
 
-        async function readPlanSseStream(response, handlers) {
+        function dispatchSseBlock(block, handlers) {
+            if (!block.trim()) {
+                return false;
+            }
+            const evt = parseSseBlock(block);
+            let payload = {};
+            try {
+                payload = JSON.parse(evt.data);
+            } catch (err) {
+                payload = { content: evt.data, message: evt.data };
+            }
+            if (handlers[evt.event]) {
+                handlers[evt.event](payload);
+            }
+            return evt.event === 'done';
+        }
+
+        async function readSseResponse(response, handlers) {
+            if (response.status === 401) {
+                handleUnauthorized();
+                throw new Error('请先登录');
+            }
             if (!response.ok || !response.body) {
                 throw new Error('stream endpoint unavailable');
+            }
+            if (!window.ReadableStream || !window.TextDecoder) {
+                throw new Error('browser stream unsupported');
             }
 
             const reader = response.body.getReader();
@@ -1121,24 +1151,20 @@
                 while (boundary !== -1) {
                     const block = buffer.slice(0, boundary);
                     buffer = buffer.slice(boundary + 2);
-                    if (block.trim()) {
-                        const evt = parsePlanSseBlock(block);
-                        let payload = {};
-                        try {
-                            payload = JSON.parse(evt.data);
-                        } catch (err) {
-                            payload = { content: evt.data, message: evt.data };
-                        }
-                        if (handlers[evt.event]) {
-                            handlers[evt.event](payload);
-                        }
-                        if (evt.event === 'done') {
-                            return;
-                        }
+                    if (dispatchSseBlock(block, handlers)) {
+                        return;
                     }
                     boundary = buffer.indexOf('\n\n');
                 }
             }
+
+            if (buffer.trim()) {
+                dispatchSseBlock(buffer, handlers);
+            }
+        }
+
+        async function readPlanSseStream(response, handlers) {
+            await readSseResponse(response, handlers);
         }
 
         function planStreamStatusText(status) {
@@ -1624,26 +1650,83 @@
             }
         }
 
-        async function askRag() {
+        async function askRagFallback(payload) {
+            const data = await apiFetch('/chat/rag-send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            document.getElementById('rag-answer-output').textContent = data.answer || '';
+            renderResultList('rag-answer-references', data.retrievedChunks || []);
+            setStatus('knowledge-status', 'RAG 问答完成');
+        }
+
+        async function askRagStream(payload) {
+            const response = await fetch('/chat/rag-send-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+                body: JSON.stringify(payload)
+            });
+
+            let answer = '';
+            let streamError = '';
+            await readSseResponse(response, {
+                status(payload) {
+                    setStatus('knowledge-status', payload.message || '正在处理 RAG 问答...');
+                },
+                retrieved(payload) {
+                    renderResultList('rag-answer-references', payload.chunks || []);
+                },
+                message(payload) {
+                    answer += payload.content || '';
+                    const output = document.getElementById('rag-answer-output');
+                    output.textContent = answer;
+                    output.scrollTop = output.scrollHeight;
+                },
+                error(payload) {
+                    streamError = payload.message || 'RAG 流式问答失败';
+                    if (!answer) {
+                        document.getElementById('rag-answer-output').textContent = streamError;
+                    }
+                    setStatus('knowledge-status', streamError, true);
+                },
+                done() {
+                    if (!streamError || answer) {
+                        setStatus('knowledge-status', 'RAG 问答完成');
+                    }
+                }
+            });
+        }
+
+        async function askRagStreamingEntry() {
+            const button = document.getElementById('rag-answer-btn');
+            const payload = {
+                question: document.getElementById('rag-question').value.trim(),
+                topK: Number(document.getElementById('rag-answer-topk').value || 5)
+            };
             setStatus('knowledge-status', '正在进行 RAG 问答...');
             document.getElementById('rag-answer-output').textContent = '';
+            renderResultList('rag-answer-references', []);
+            button.disabled = true;
             try {
-                const data = await apiFetch('/chat/rag-send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({
-                        question: document.getElementById('rag-question').value.trim(),
-                        topK: Number(document.getElementById('rag-answer-topk').value || 5)
-                    })
-                });
-                document.getElementById('rag-answer-output').textContent = data.answer || '';
-                renderResultList('rag-answer-references', data.retrievedChunks || []);
-                setStatus('knowledge-status', 'RAG 问答完成');
+                await askRagStream(payload);
             } catch (err) {
-                document.getElementById('rag-answer-output').textContent = err.message || 'RAG 问答失败';
-                renderResultList('rag-answer-references', []);
-                setStatus('knowledge-status', err.message || 'RAG 问答失败', true);
+                try {
+                    setStatus('knowledge-status', '流式问答不可用，正在切换同步接口...');
+                    await askRagFallback(payload);
+                } catch (fallbackErr) {
+                    document.getElementById('rag-answer-output').textContent =
+                        fallbackErr.message || err.message || 'RAG 问答失败';
+                    renderResultList('rag-answer-references', []);
+                    setStatus('knowledge-status', fallbackErr.message || err.message || 'RAG 问答失败', true);
+                }
+            } finally {
+                button.disabled = false;
             }
+        }
+
+        async function askRag() {
+            await askRagStreamingEntry();
         }
 
         async function openToolsPanel() {
@@ -1701,26 +1784,114 @@
             }
         }
 
-        async function askFitnessTool() {
-            setStatus('tools-status', '正在执行工具问答...');
-            try {
-                const data = await apiFetch('/chat/fitness-tool-send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({
-                        question: document.getElementById('tool-question').value.trim()
-                    })
-                });
-                document.getElementById('tool-answer-output').textContent = formatJson({
-                    answer: data.answer,
-                    toolName: data.toolName,
-                    toolResult: data.toolResult
-                });
-                setStatus('tools-status', '工具问答完成');
-            } catch (err) {
-                document.getElementById('tool-answer-output').textContent = err.message || '工具问答失败';
-                setStatus('tools-status', err.message || '工具问答失败', true);
+        function renderToolStreamOutput(state) {
+            const payload = {};
+            if (state.status) {
+                payload.status = state.status;
             }
+            if (state.toolName) {
+                payload.toolName = state.toolName;
+            }
+            if (state.toolResult !== null) {
+                payload.toolResult = state.toolResult;
+            }
+            if (state.error) {
+                payload.error = state.error;
+            }
+            payload.answer = state.answer || '';
+            document.getElementById('tool-answer-output').textContent = formatJson(payload);
+        }
+
+        async function askFitnessToolFallback(payload) {
+            const data = await apiFetch('/chat/fitness-tool-send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            document.getElementById('tool-answer-output').textContent = formatJson({
+                answer: data.answer,
+                toolName: data.toolName,
+                toolResult: data.toolResult
+            });
+            setStatus('tools-status', '工具问答完成');
+        }
+
+        async function askFitnessToolStream(payload) {
+            const response = await fetch('/chat/fitness-tool-send-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+                body: JSON.stringify(payload)
+            });
+
+            const state = {
+                status: '',
+                toolName: '',
+                toolResult: null,
+                answer: '',
+                error: ''
+            };
+            renderToolStreamOutput(state);
+
+            await readSseResponse(response, {
+                status(payload) {
+                    state.status = payload.message || '';
+                    setStatus('tools-status', state.status || '正在执行工具问答...');
+                    renderToolStreamOutput(state);
+                },
+                tool_selected(payload) {
+                    state.toolName = payload.toolName || '';
+                    state.status = payload.reason || ('已选择工具: ' + state.toolName);
+                    setStatus('tools-status', state.status);
+                    renderToolStreamOutput(state);
+                },
+                tool_result(payload) {
+                    state.toolName = payload.toolName || state.toolName;
+                    state.toolResult = payload.result || {};
+                    renderToolStreamOutput(state);
+                },
+                message(payload) {
+                    state.answer += payload.content || '';
+                    renderToolStreamOutput(state);
+                },
+                error(payload) {
+                    state.error = payload.message || '工具流式问答失败';
+                    setStatus('tools-status', state.error, true);
+                    renderToolStreamOutput(state);
+                },
+                done() {
+                    if (!state.error || state.answer) {
+                        setStatus('tools-status', '工具问答完成');
+                    }
+                }
+            });
+        }
+
+        async function askFitnessToolStreamingEntry() {
+            const button = document.getElementById('tool-answer-btn');
+            const payload = {
+                question: document.getElementById('tool-question').value.trim()
+            };
+            setStatus('tools-status', '正在执行工具问答...');
+            document.getElementById('tool-answer-output').textContent = '';
+            button.disabled = true;
+            try {
+                await askFitnessToolStream(payload);
+            } catch (err) {
+                try {
+                    setStatus('tools-status', '流式工具问答不可用，正在切换同步接口...');
+                    await askFitnessToolFallback(payload);
+                } catch (fallbackErr) {
+                    document.getElementById('tool-answer-output').textContent =
+                        fallbackErr.message || err.message || '工具问答失败';
+                    setStatus('tools-status', fallbackErr.message || err.message || '工具问答失败', true);
+                }
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function askFitnessTool() {
+            await askFitnessToolStreamingEntry();
         }
 
         function escapeHtml(value) {

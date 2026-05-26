@@ -11,6 +11,7 @@
 #include <regex>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -206,6 +207,72 @@ std::string callAiSummary(const std::string& prompt, const std::string& modelTyp
     std::vector<std::pair<std::string, long long>> messages = {{ prompt, 0 }};
     json response = helper.request(strategy->buildRequest(messages));
     return strategy->parseResponse(response);
+}
+
+std::string streamAiPrompt(const std::string& prompt,
+    const std::string& modelType,
+    AIHelper::StreamCallback onChunk)
+{
+    auto strategy = StrategyFactory::instance().create(normalizeModelType(modelType));
+    AIHelper helper;
+    helper.setStrategy(strategy);
+    std::vector<std::pair<std::string, long long>> messages = {{ prompt, 0 }};
+    return helper.requestStream(strategy->buildStreamRequest(messages), std::move(onChunk));
+}
+
+std::string streamPromptWithFallback(http::HttpStreamWriter& writer,
+    const std::string& prompt,
+    const std::string& modelType)
+{
+    std::string answer;
+    try
+    {
+        answer = streamAiPrompt(prompt, modelType, [&writer](const std::string& chunk) {
+            if (!chunk.empty())
+            {
+                writer.sendMessage(chunk);
+            }
+        });
+    }
+    catch (const std::exception& e)
+    {
+        writer.sendError(std::string("AI 流式调用失败，正在切换同步回答: ") + e.what());
+    }
+
+    if (answer.empty())
+    {
+        answer = callAiSummary(prompt, modelType);
+        if (!answer.empty())
+        {
+            writer.sendMessage(answer);
+        }
+    }
+    return answer;
+}
+
+std::string buildCoachFallbackPrompt(const std::string& question)
+{
+    std::ostringstream prompt;
+    prompt
+        << "你是 AI 私人健身教练。\n"
+        << "用户问题：\n" << question << "\n\n"
+        << "请用中文给出实用、谨慎的健身建议。不要做医疗诊断；如果涉及明显疼痛、伤病、胸闷、头晕或严重不适，建议咨询医生或专业人士。";
+    return prompt.str();
+}
+
+std::string toolSelectionReason(const std::string& toolName)
+{
+    if (toolName == "calculate_bmi") return "检测到 BMI 相关问题";
+    if (toolName == "calculate_bmr") return "检测到 BMR 或基础代谢相关问题";
+    if (toolName == "calculate_tdee") return "检测到 TDEE 或每日消耗相关问题";
+    if (toolName == "calculate_calorie_deficit") return "检测到热量缺口或减脂热量相关问题";
+    if (toolName == "calculate_training_volume") return "检测到训练容量计算需求";
+    if (toolName == "get_today_training_plan") return "用户询问今天该练什么";
+    if (toolName == "get_week_training_calendar") return "用户询问本周训练安排";
+    if (toolName == "get_recent_training_records") return "用户询问最近训练记录";
+    if (toolName == "summarize_recent_training") return "用户询问最近训练总结";
+    if (toolName == "save_training_record") return "用户希望记录训练";
+    return "根据规则匹配到健身工具";
 }
 
 class MysqlFitnessDataProvider : public tools::FitnessDataProvider
@@ -617,6 +684,119 @@ void FitnessToolHandler::handleChatToolSend(const http::HttpRequest& req, http::
     sendJson(req, resp, http::HttpResponse::k200Ok, "OK",
         json{{"success", true}, {"answer", answer}, {"toolName", toolName}, {"toolResult", toolResult}},
         false);
+}
+
+void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, http::HttpStreamWriter& writer)
+{
+    writer.sendSseHeader();
+
+    http::HttpResponse sessionResp(false);
+    auto session = server_->getSessionManager()->getSession(req, &sessionResp);
+    if (session->getValue("isLoggedIn") != "true")
+    {
+        writer.sendError("请先登录");
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    int userId = 0;
+    try
+    {
+        userId = std::stoi(session->getValue("userId"));
+    }
+    catch (const std::exception&)
+    {
+        writer.sendError("登录状态异常，请重新登录");
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    json requestBody;
+    std::string errorMessage;
+    if (!parseJsonBody(req, requestBody, errorMessage))
+    {
+        writer.sendError(errorMessage);
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    std::string question = jsonString(requestBody, "question");
+    if (question.empty())
+    {
+        writer.sendError("question 不能为空");
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    std::string modelType = jsonString(requestBody, "modelType");
+    writer.sendStatus("正在分析你的问题");
+
+    std::thread([writer, requestBody, question, modelType, userId]() mutable {
+        try
+        {
+            http::MysqlUtil mysqlUtil;
+            MysqlFitnessDataProvider provider(mysqlUtil);
+            tools::FitnessToolService service(&provider);
+
+            std::string toolName = service.matchToolName(question);
+            if (toolName.empty())
+            {
+                writer.sendStatus("未匹配到工具，切换为普通 AI 教练回答");
+                std::string answer = streamPromptWithFallback(writer, buildCoachFallbackPrompt(question), modelType);
+                if (answer.empty())
+                {
+                    writer.sendError("AI 未返回可用回答");
+                }
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
+            writer.sendEvent("tool_selected",
+                json{{"toolName", toolName}, {"reason", toolSelectionReason(toolName)}}.dump());
+
+            if (toolName == "save_training_record" && !requestBody.contains("arguments"))
+            {
+                writer.sendError("自然语言记录解析本轮先不做复杂抽取，请在训练记录表单中保存，或使用 /fitness/tool/call 传结构化 records");
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
+            json arguments = requestBody.contains("arguments") && requestBody["arguments"].is_object()
+                ? requestBody["arguments"]
+                : json::object();
+            json toolResult = service.callTool(toolName, arguments, userId);
+            if (!toolResult.value("success", false))
+            {
+                writer.sendError(toolResult.value("message", "工具调用失败"));
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
+            writer.sendEvent("tool_result", json{{"toolName", toolName}, {"result", toolResult}}.dump());
+            writer.sendStatus("正在基于工具结果生成回答");
+
+            std::string prompt = service.buildToolSummaryPrompt(question, toolName, toolResult);
+            std::string answer = streamPromptWithFallback(writer, prompt, modelType);
+            if (answer.empty())
+            {
+                writer.sendError("AI 未返回可用回答");
+            }
+            writer.sendDone();
+        }
+        catch (const std::exception& e)
+        {
+            writer.sendError(std::string("健身工具流式问答失败: ") + e.what());
+            writer.sendDone();
+        }
+        writer.close();
+    }).detach();
 }
 
 bool FitnessToolHandler::requireLogin(const http::HttpRequest& req, http::HttpResponse* resp, int& userId)

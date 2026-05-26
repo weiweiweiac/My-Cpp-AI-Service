@@ -47,7 +47,7 @@ void HttpStreamWriter::sendError(const std::string& message)
 
 void HttpStreamWriter::sendDone()
 {
-    sendEvent("done", jsonData("message", "done"));
+    sendEvent("done", doneData());
 }
 
 void HttpStreamWriter::close()

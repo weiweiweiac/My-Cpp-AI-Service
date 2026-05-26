@@ -31,8 +31,13 @@ int main()
         "escapes JSON data payloads");
 
     assertEqual(
-        http::HttpStreamWriter::formatEvent("done", http::HttpStreamWriter::jsonData("message", "done")),
-        "event: done\ndata: {\"message\":\"done\"}\n\n",
+        http::HttpStreamWriter::jsonData("content", "line1\n\"quoted\"\\slash 中文"),
+        "{\"content\":\"line1\\n\\\"quoted\\\"\\\\slash 中文\"}",
+        "escapes JSON data payloads while preserving UTF-8 text");
+
+    assertEqual(
+        http::HttpStreamWriter::formatEvent("done", http::HttpStreamWriter::doneData()),
+        "event: done\ndata: {\"message\":\"完成\"}\n\n",
         "formats done event with JSON data");
 
     return 0;

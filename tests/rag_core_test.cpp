@@ -77,6 +77,32 @@ int main()
     require(indexResult.chunkCount > 0, "FitnessRagService should create at least one chunk");
     require(std::filesystem::exists(storePath), "FitnessRagService should persist JSON vector store");
 
+    auto benchResult = service.indexText(
+        "卧推动作要点",
+        "unit-test",
+        "卧推时应保持肩胛后缩下沉，控制下放幅度，避免肩部前顶。如果出现明显疼痛，应停止训练并咨询医生或专业人士。");
+    require(benchResult.success, "FitnessRagService should index bench knowledge");
+
+    auto squatResult = service.indexText(
+        "深蹲动作要点",
+        "unit-test",
+        "深蹲时保持核心收紧，膝盖方向与脚尖一致，髋膝同步屈伸，动作全程稳定，不要为了重量牺牲动作质量。");
+    require(squatResult.success, "FitnessRagService should index squat knowledge");
+
+    auto proteinResult = service.indexText(
+        "蛋白质摄入建议",
+        "unit-test",
+        "增肌或减脂期间都应关注蛋白质摄入，优先选择鸡蛋、鱼肉、瘦肉、奶制品和豆制品，并结合总热量安排。");
+    require(proteinResult.success, "FitnessRagService should index nutrition knowledge");
+
+    auto concreteResults = service.search("卧推肩膀疼怎么办", 5);
+    bool hasBenchChunk = false;
+    for (const auto& result : concreteResults)
+    {
+        hasBenchChunk = hasBenchChunk || result.chunk.title.find("卧推动作要点") != std::string::npos;
+    }
+    require(hasBenchChunk, "FitnessRagService should retrieve bench knowledge for shoulder pain query");
+
     auto results = service.search("卧推肩膀疼怎么办", 3);
     require(!results.empty(), "FitnessRagService should retrieve indexed knowledge");
     require(results.front().chunk.title == "卧推动作要点", "Search result should include chunk metadata");

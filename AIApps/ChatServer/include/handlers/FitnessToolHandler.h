@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../../../HttpServer/include/http/HttpStreamWriter.h"
 #include "../../../../HttpServer/include/router/RouterHandler.h"
 #include "../../../../HttpServer/include/utils/JsonUtil.h"
 #include "../../../../HttpServer/include/utils/MysqlUtil.h"
@@ -20,6 +21,7 @@ public:
     {}
 
     void handle(const http::HttpRequest& req, http::HttpResponse* resp) override;
+    void handleChatToolSendStream(const http::HttpRequest& req, http::HttpStreamWriter& writer);
 
 private:
     void handleListTools(const http::HttpRequest& req, http::HttpResponse* resp);

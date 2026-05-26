@@ -8,6 +8,7 @@
 #include <cctype>
 #include <iomanip>
 #include <sstream>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -127,6 +128,17 @@ std::string callAiWithPrompt(const std::string& prompt, const std::string& model
     std::vector<std::pair<std::string, long long>> messages = {{ prompt, 0 }};
     json response = helper.request(strategy->buildRequest(messages));
     return strategy->parseResponse(response);
+}
+
+std::string streamAiWithPrompt(const std::string& prompt,
+    const std::string& modelType,
+    AIHelper::StreamCallback onChunk)
+{
+    auto strategy = StrategyFactory::instance().create(normalizeModelType(modelType));
+    AIHelper helper;
+    helper.setStrategy(strategy);
+    std::vector<std::pair<std::string, long long>> messages = {{ prompt, 0 }};
+    return helper.requestStream(strategy->buildStreamRequest(messages), std::move(onChunk));
 }
 
 } // namespace
@@ -272,6 +284,132 @@ void FitnessRagHandler::handleChatRag(const http::HttpRequest& req, http::HttpRe
                  {"retrievedChunks", searchResultsToJson(results)}},
             true);
     }
+}
+
+void FitnessRagHandler::handleChatRagStream(const http::HttpRequest& req, http::HttpStreamWriter& writer)
+{
+    writer.sendSseHeader();
+
+    http::HttpResponse sessionResp(false);
+    auto session = server_->getSessionManager()->getSession(req, &sessionResp);
+    if (session->getValue("isLoggedIn") != "true")
+    {
+        writer.sendError("请先登录");
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    int userId = 0;
+    try
+    {
+        userId = std::stoi(session->getValue("userId"));
+    }
+    catch (const std::exception&)
+    {
+        writer.sendError("登录状态异常，请重新登录");
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+    (void)userId;
+
+    json requestBody;
+    std::string errorMessage;
+    if (!parseJsonBody(req, requestBody, errorMessage))
+    {
+        writer.sendError(errorMessage);
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    std::string question = jsonString(requestBody, "question");
+    if (question.empty())
+    {
+        writer.sendError("question 不能为空");
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
+    int topK = normalizeTopK(jsonInt(requestBody, "topK", 5));
+    std::string modelType = jsonString(requestBody, "modelType");
+
+    writer.sendStatus("正在检索健身知识库");
+    std::thread([writer, question, modelType, topK]() mutable {
+        try
+        {
+            rag::FitnessRagService service;
+            service.loadStore();
+            if (service.size() == 0)
+            {
+                writer.sendError("知识库为空或没有检索到相关片段，请先导入知识");
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
+            auto results = service.search(question, topK);
+            if (results.empty())
+            {
+                writer.sendError("知识库为空或没有检索到相关片段，请先导入知识");
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
+            writer.sendEvent("retrieved", json{{"chunks", searchResultsToJson(results)}}.dump());
+            writer.sendStatus("正在基于参考片段生成回答");
+
+            std::string prompt = service.buildRagPrompt(question, results);
+            std::string answer;
+            try
+            {
+                answer = streamAiWithPrompt(prompt, modelType, [&writer](const std::string& chunk) {
+                    if (!chunk.empty())
+                    {
+                        writer.sendMessage(chunk);
+                    }
+                });
+            }
+            catch (const std::exception& e)
+            {
+                writer.sendError(std::string("AI 流式调用失败，正在切换同步回答: ") + e.what());
+            }
+
+            if (answer.empty())
+            {
+                try
+                {
+                    answer = callAiWithPrompt(prompt, modelType);
+                    if (!answer.empty())
+                    {
+                        writer.sendMessage(answer);
+                    }
+                }
+                catch (const std::exception& e)
+                {
+                    writer.sendError(std::string("AI 回答失败: ") + e.what());
+                    writer.sendDone();
+                    writer.close();
+                    return;
+                }
+            }
+
+            if (answer.empty())
+            {
+                writer.sendError("AI 未返回可用回答");
+            }
+            writer.sendDone();
+        }
+        catch (const std::exception& e)
+        {
+            writer.sendError(std::string("RAG 流式问答失败: ") + e.what());
+            writer.sendDone();
+        }
+        writer.close();
+    }).detach();
 }
 
 bool FitnessRagHandler::requireLogin(const http::HttpRequest& req, http::HttpResponse* resp, int& userId)
