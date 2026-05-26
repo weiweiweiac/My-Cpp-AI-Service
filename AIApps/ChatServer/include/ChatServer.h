@@ -42,6 +42,8 @@ class ChatSessionsHandler;
 class ChatSpeechHandler;
 class FitnessProfileHandler;
 class FitnessCalendarHandler;
+class FitnessRagHandler;
+class FitnessToolHandler;
 
 class ChatServer {
 public:
@@ -70,6 +72,8 @@ private:
 	friend class ChatSpeechHandler;
 	friend class FitnessProfileHandler;
 	friend class FitnessCalendarHandler;
+	friend class FitnessRagHandler;
+	friend class FitnessToolHandler;
 
 private:
 	void initialize();

@@ -62,6 +62,23 @@ add_executable(http_stream_writer_test
 
 add_test(NAME http_stream_writer_test COMMAND http_stream_writer_test)
 
+add_executable(rag_core_test
+    ${PROJECT_SOURCE_DIR}/tests/rag_core_test.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/TextSplitter.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/HashEmbeddingClient.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/JsonVectorStore.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/FitnessRagService.cpp
+)
+
+add_test(NAME rag_core_test COMMAND rag_core_test)
+
+add_executable(fitness_tools_test
+    ${PROJECT_SOURCE_DIR}/tests/fitness_tools_test.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/tools/FitnessToolService.cpp
+)
+
+add_test(NAME fitness_tools_test COMMAND fitness_tools_test)
+
 target_link_libraries(http_server
     pthread
     muduo_net
@@ -84,6 +101,11 @@ target_link_libraries(http_server
     SimpleAmqpClient
     rabbitmq
 )
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
+    target_link_libraries(http_server stdc++fs)
+    target_link_libraries(rag_core_test stdc++fs)
+endif()
 
 # 如果库不在默认路径，添加链接目录
 link_directories(/usr/local/lib)

@@ -16,6 +16,8 @@
 #include"../include/handlers/ChatSpeechHandler.h"
 #include"../include/handlers/FitnessProfileHandler.h"
 #include"../include/handlers/FitnessCalendarHandler.h"
+#include"../include/handlers/FitnessRagHandler.h"
+#include"../include/handlers/FitnessToolHandler.h"
 
 #include "../include/ChatServer.h"
 #include "../../../HttpServer/include/http/HttpRequest.h"
@@ -180,6 +182,20 @@ void ChatServer::initializeRouter() {
         std::make_shared<FitnessCalendarHandler>(this, FitnessCalendarHandler::Action::UpdateStatus));
     httpServer_.Get("/fitness/calendar/record/list",
         std::make_shared<FitnessCalendarHandler>(this, FitnessCalendarHandler::Action::ListRecords));
+
+    httpServer_.Post("/rag/index",
+        std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::Index));
+    httpServer_.Post("/rag/search",
+        std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::Search));
+    httpServer_.Post("/chat/rag-send",
+        std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::ChatRag));
+
+    httpServer_.Get("/fitness/tools/list",
+        std::make_shared<FitnessToolHandler>(this, FitnessToolHandler::Action::ListTools));
+    httpServer_.Post("/fitness/tool/call",
+        std::make_shared<FitnessToolHandler>(this, FitnessToolHandler::Action::CallTool));
+    httpServer_.Post("/chat/fitness-tool-send",
+        std::make_shared<FitnessToolHandler>(this, FitnessToolHandler::Action::ChatToolSend));
 
     httpServer_.Get("/", std::make_shared<ChatEntryHandler>(this));
     httpServer_.Get("/entry", std::make_shared<ChatEntryHandler>(this));
