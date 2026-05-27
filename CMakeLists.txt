@@ -62,6 +62,12 @@ add_executable(http_stream_writer_test
 
 add_test(NAME http_stream_writer_test COMMAND http_stream_writer_test)
 
+add_executable(login_session_policy_test
+    ${PROJECT_SOURCE_DIR}/tests/login_session_policy_test.cpp
+)
+
+add_test(NAME login_session_policy_test COMMAND login_session_policy_test)
+
 add_executable(rag_core_test
     ${PROJECT_SOURCE_DIR}/tests/rag_core_test.cpp
     ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/TextSplitter.cpp

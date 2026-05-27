@@ -1,4 +1,5 @@
 #include "../include/handlers/ChatLoginHandler.h"
+#include "../include/auth/LoginSessionPolicy.h"
 
 void ChatLoginHandler::handle(const http::HttpRequest& req, http::HttpResponse* resp)
 {
@@ -25,47 +26,37 @@ void ChatLoginHandler::handle(const http::HttpRequest& req, http::HttpResponse* 
         int userId = queryUserId(username, password);
         if (userId != -1)
         {
-
             auto session = server_->getSessionManager()->getSession(req, resp);
+            std::string oldSessionId;
+            {
+                std::lock_guard<std::mutex> lock(server_->mutexForOnlineUsers_);
+                oldSessionId = auth::recordSuccessfulLogin(
+                    server_->onlineUsers_,
+                    server_->activeLoginSessionIds_,
+                    userId,
+                    session->getId());
+            }
 
+            if (!oldSessionId.empty())
+            {
+                server_->getSessionManager()->destroySession(oldSessionId);
+            }
 
             session->setValue("userId", std::to_string(userId));
             session->setValue("username", username);
             session->setValue("isLoggedIn", "true");
-            if (server_->onlineUsers_.find(userId) == server_->onlineUsers_.end() || server_->onlineUsers_[userId] == false)
-            {
-                {
-                    std::lock_guard<std::mutex> lock(server_->mutexForOnlineUsers_);
-                    server_->onlineUsers_[userId] = true;
-                }
 
-                json successResp;
-                successResp["success"] = true;
-                successResp["userId"] = userId;
-                std::string successBody = successResp.dump(4);
+            json successResp;
+            successResp["success"] = true;
+            successResp["userId"] = userId;
+            std::string successBody = successResp.dump(4);
 
-                resp->setStatusLine(req.getVersion(), http::HttpResponse::k200Ok, "OK");
-                resp->setCloseConnection(false);
-                resp->setContentType("application/json");
-                resp->setContentLength(successBody.size());
-                resp->setBody(successBody);
-                return;
-            }
-            else
-            {
-
-                json failureResp;
-                failureResp["success"] = false;
-                failureResp["error"] = "˺ط¼";
-                std::string failureBody = failureResp.dump(4);
-
-                resp->setStatusLine(req.getVersion(), http::HttpResponse::k403Forbidden, "Forbidden");
-                resp->setCloseConnection(true);
-                resp->setContentType("application/json");
-                resp->setContentLength(failureBody.size());
-                resp->setBody(failureBody);
-                return;
-            }
+            resp->setStatusLine(req.getVersion(), http::HttpResponse::k200Ok, "OK");
+            resp->setCloseConnection(false);
+            resp->setContentType("application/json");
+            resp->setContentLength(successBody.size());
+            resp->setBody(successBody);
+            return;
         }
         else 
         {

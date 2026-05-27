@@ -102,6 +102,7 @@ private:
 	http::MysqlUtil		mysqlUtil_;
 
 	std::unordered_map<int, bool>	onlineUsers_;
+	std::unordered_map<int, std::string>	activeLoginSessionIds_;
 	std::mutex	mutexForOnlineUsers_;
 
 	

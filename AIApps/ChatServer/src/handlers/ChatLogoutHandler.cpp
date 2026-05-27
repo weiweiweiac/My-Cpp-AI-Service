@@ -1,39 +1,51 @@
 #include "../include/handlers/ChatLogoutHandler.h"
+#include "../include/auth/LoginSessionPolicy.h"
 
 void ChatLogoutHandler::handle(const http::HttpRequest& req, http::HttpResponse* resp)
 {
-    auto contentType = req.getHeader("Content-Type");
-    if (contentType.empty() || contentType != "application/json" || req.getBody().empty())
-    {
-        resp->setStatusLine(req.getVersion(), http::HttpResponse::k400BadRequest, "Bad Request");
-        resp->setCloseConnection(true);
-        resp->setContentType("application/json");
-        resp->setContentLength(0);
-        resp->setBody("");
-        return;
-    }
-
-
     try
     {
-
         auto session = server_->getSessionManager()->getSession(req, resp);
+        const std::string sessionId = session->getId();
+        const std::string userIdValue = session->getValue("userId");
 
-        int userId = std::stoi(session->getValue("userId"));
+        if (userIdValue.empty())
+        {
+            session->clear();
+            server_->getSessionManager()->destroySession(sessionId);
+
+            json response;
+            response["success"] = true;
+            response["message"] = "already logged out";
+            std::string responseBody = response.dump(4);
+            resp->setStatusLine(req.getVersion(), http::HttpResponse::k200Ok, "OK");
+            resp->setCloseConnection(true);
+            resp->setContentType("application/json");
+            resp->setContentLength(responseBody.size());
+            resp->setBody(responseBody);
+            return;
+        }
+
+        int userId = std::stoi(userIdValue);
 
         session->clear();
+        server_->getSessionManager()->destroySession(sessionId);
 
-        server_->getSessionManager()->destroySession(session->getId());
-
-        json parsed = json::parse(req.getBody());
-
-        {   
+        bool clearedActiveLogin = false;
+        {
             std::lock_guard<std::mutex> lock(server_->mutexForOnlineUsers_);
-            server_->onlineUsers_.erase(userId);
+            clearedActiveLogin = auth::recordLogout(
+                server_->onlineUsers_,
+                server_->activeLoginSessionIds_,
+                userId,
+                sessionId);
         }
+
+        (void)clearedActiveLogin;
 
 
         json response;
+        response["success"] = true;
         response["message"] = "logout successful";
         std::string responseBody = response.dump(4);
         resp->setStatusLine(req.getVersion(), http::HttpResponse::k200Ok, "OK");
@@ -46,10 +58,10 @@ void ChatLogoutHandler::handle(const http::HttpRequest& req, http::HttpResponse*
     {
 
         json failureResp;
-        failureResp["status"] = "error";
-        failureResp["message"] = e.what();
+        failureResp["success"] = true;
+        failureResp["message"] = std::string("already logged out: ") + e.what();
         std::string failureBody = failureResp.dump(4);
-        resp->setStatusLine(req.getVersion(), http::HttpResponse::k400BadRequest, "Bad Request");
+        resp->setStatusLine(req.getVersion(), http::HttpResponse::k200Ok, "OK");
         resp->setCloseConnection(true);
         resp->setContentType("application/json");
         resp->setContentLength(failureBody.size());
