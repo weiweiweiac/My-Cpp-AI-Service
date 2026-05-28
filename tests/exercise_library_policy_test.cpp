@@ -99,5 +99,11 @@ int main()
     require(countOccurrences(seed, "(0,") >= 39,
         "seed sql should contain at least 39 system exercise rows with user_id=0");
 
+    const std::string chatServerHeader = readFile("AIApps/ChatServer/include/ChatServer.h");
+    require(chatServerHeader.find("class ExerciseLibraryHandler;") != std::string::npos,
+        "ChatServer.h should forward declare ExerciseLibraryHandler");
+    require(chatServerHeader.find("friend class ExerciseLibraryHandler;") != std::string::npos,
+        "ExerciseLibraryHandler should be a ChatServer friend like the other handlers");
+
     return 0;
 }

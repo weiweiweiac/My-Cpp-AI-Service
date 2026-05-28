@@ -44,6 +44,7 @@ class FitnessProfileHandler;
 class FitnessCalendarHandler;
 class FitnessRagHandler;
 class FitnessToolHandler;
+class ExerciseLibraryHandler;
 class UserStatusHandler;
 
 class ChatServer {
@@ -75,6 +76,7 @@ private:
 	friend class FitnessCalendarHandler;
 	friend class FitnessRagHandler;
 	friend class FitnessToolHandler;
+	friend class ExerciseLibraryHandler;
 	friend class UserStatusHandler;
 
 private:
