@@ -2,6 +2,7 @@
 
 #include "../include/AIUtil/AIHelper.h"
 #include "../include/AIUtil/AIFactory.h"
+#include "AIApps/ChatServer/include/auth/AIQuotaService.h"
 
 #include <algorithm>
 #include <cctype>
@@ -790,6 +791,10 @@ void FitnessCalendarHandler::handleGeneratePlan(const http::HttpRequest& req, ht
         return;
     }
 
+    std::string modelType = "1";
+    bool aiCallStarted = false;
+    bool quotaFinalized = false;
+
     try
     {
         json requestBody = json::object();
@@ -828,23 +833,43 @@ void FitnessCalendarHandler::handleGeneratePlan(const http::HttpRequest& req, ht
             return;
         }
 
-        std::string modelType = normalizeModelType(getJsonString(requestBody, "modelType"));
+        modelType = normalizeModelType(getJsonString(requestBody, "modelType"));
+        auth::AIQuotaService quotaService;
+        auto quotaCheck = quotaService.checkBeforeAI(userId);
+        if (!quotaCheck.allowed)
+        {
+            json body;
+            body["success"] = false;
+            body["message"] = quotaCheck.message;
+            sendJson(req, resp,
+                quotaCheck.systemError ? http::HttpResponse::k500InternalServerError : http::HttpResponse::k403Forbidden,
+                quotaCheck.systemError ? "Internal Server Error" : "Forbidden",
+                body, true);
+            return;
+        }
+
         std::string prompt = buildPrompt(profile, startDate);
 
         auto strategy = StrategyFactory::instance().create(modelType);
         AIHelper helper;
         helper.setStrategy(strategy);
         std::vector<std::pair<std::string, long long>> messages = {{ prompt, 0 }};
+        aiCallStarted = true;
         json aiResponse = helper.request(strategy->buildRequest(messages));
         std::string aiText = trim(strategy->parseResponse(aiResponse));
         if (aiText.empty())
         {
+            quotaService.logAIUsage(userId, "/fitness/calendar/generate-plan", modelType,
+                false, false, "AI returned empty training plan");
+            quotaFinalized = true;
             json body;
             body["success"] = false;
             body["message"] = "AI 未返回可用训练计划";
             sendJson(req, resp, http::HttpResponse::k500InternalServerError, "Internal Server Error", body, true);
             return;
         }
+        quotaService.consumeQuotaOnSuccess(userId, "/fitness/calendar/generate-plan", modelType);
+        quotaFinalized = true;
 
         auto calendarItems = parseCalendarItems(aiText, startDate, profile.weeklyDays);
         std::string profileSnapshot = profile.snapshot.dump();
@@ -874,6 +899,12 @@ void FitnessCalendarHandler::handleGeneratePlan(const http::HttpRequest& req, ht
     }
     catch (const std::exception& e)
     {
+        if (aiCallStarted && !quotaFinalized)
+        {
+            auth::AIQuotaService quotaService;
+            quotaService.logAIUsage(userId, "/fitness/calendar/generate-plan", modelType,
+                false, false, e.what());
+        }
         json body;
         body["success"] = false;
         body["message"] = std::string("生成训练计划失败: ") + e.what();
@@ -933,9 +964,22 @@ void FitnessCalendarHandler::handleGeneratePlanStream(const http::HttpRequest& r
     }
 
     std::string modelType = normalizeModelType(getJsonString(requestBody, "modelType"));
+    auth::AIQuotaService quotaService;
+    auto quotaCheck = quotaService.checkBeforeAI(userId);
+    if (!quotaCheck.allowed)
+    {
+        writer.sendError(quotaCheck.message);
+        writer.sendDone();
+        writer.close();
+        return;
+    }
+
     writer.sendStatus("accepted");
 
     std::thread([writer, userId, startDate, modelType]() mutable {
+        auth::AIQuotaService quotaService;
+        bool aiCallStarted = false;
+        bool quotaFinalized = false;
         try
         {
             http::MysqlUtil mysqlUtil;
@@ -960,6 +1004,7 @@ void FitnessCalendarHandler::handleGeneratePlanStream(const http::HttpRequest& r
             std::string aiText;
             try
             {
+                aiCallStarted = true;
                 aiText = helper.requestStream(
                     strategy->buildStreamRequest(messages),
                     [&writer](const std::string& chunk) {
@@ -974,6 +1019,7 @@ void FitnessCalendarHandler::handleGeneratePlanStream(const http::HttpRequest& r
 
             if (aiText.empty())
             {
+                aiCallStarted = true;
                 json aiResponse = helper.request(strategy->buildRequest(messages));
                 aiText = trim(strategy->parseResponse(aiResponse));
                 if (!aiText.empty())
@@ -984,11 +1030,16 @@ void FitnessCalendarHandler::handleGeneratePlanStream(const http::HttpRequest& r
 
             if (aiText.empty())
             {
+                quotaService.logAIUsage(userId, "/fitness/calendar/generate-plan-stream", modelType,
+                    false, false, "AI returned empty training plan");
+                quotaFinalized = true;
                 writer.sendError("AI 未返回可用训练计划");
                 writer.sendDone();
                 writer.close();
                 return;
             }
+            quotaService.consumeQuotaOnSuccess(userId, "/fitness/calendar/generate-plan-stream", modelType);
+            quotaFinalized = true;
 
             writer.sendStatus("writing_calendar");
             auto calendarItems = parseCalendarItems(aiText, startDate, profile.weeklyDays);
@@ -1004,6 +1055,11 @@ void FitnessCalendarHandler::handleGeneratePlanStream(const http::HttpRequest& r
         }
         catch (const std::exception& e)
         {
+            if (aiCallStarted && !quotaFinalized)
+            {
+                quotaService.logAIUsage(userId, "/fitness/calendar/generate-plan-stream", modelType,
+                    false, false, e.what());
+            }
             writer.sendError(std::string("生成训练计划失败: ") + e.what());
             writer.sendDone();
         }

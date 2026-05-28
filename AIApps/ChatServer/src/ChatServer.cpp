@@ -18,6 +18,7 @@
 #include"../include/handlers/FitnessCalendarHandler.h"
 #include"../include/handlers/FitnessRagHandler.h"
 #include"../include/handlers/FitnessToolHandler.h"
+#include"../include/handlers/UserStatusHandler.h"
 
 #include "../include/ChatServer.h"
 #include "../../../HttpServer/include/http/HttpRequest.h"
@@ -217,6 +218,11 @@ void ChatServer::initializeRouter() {
     httpServer_.Post("/register", std::make_shared<ChatRegisterHandler>(this));
     
     httpServer_.Post("/user/logout", std::make_shared<ChatLogoutHandler>(this));
+
+    httpServer_.Get("/user/me",
+        std::make_shared<UserStatusHandler>(this, UserStatusHandler::Action::Me));
+    httpServer_.Get("/user/ai-usage",
+        std::make_shared<UserStatusHandler>(this, UserStatusHandler::Action::AIUsage));
 
     httpServer_.Get("/chat", std::make_shared<ChatHandler>(this));
 

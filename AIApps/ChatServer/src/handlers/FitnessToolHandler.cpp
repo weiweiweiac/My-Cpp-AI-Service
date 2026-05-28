@@ -1,5 +1,6 @@
 #include "../../include/handlers/FitnessToolHandler.h"
 
+#include "AIApps/ChatServer/include/auth/AIQuotaService.h"
 #include "../../include/AIUtil/AIHelper.h"
 #include "../../include/AIUtil/AIFactory.h"
 #include "../../include/tools/FitnessToolService.h"
@@ -662,6 +663,7 @@ void FitnessToolHandler::handleChatToolSend(const http::HttpRequest& req, http::
         : json::object();
     json toolResult = service.callTool(toolName, arguments, userId);
 
+    std::string modelType = jsonString(requestBody, "modelType");
     std::string answer;
     if (!toolResult.value("success", false))
     {
@@ -669,14 +671,38 @@ void FitnessToolHandler::handleChatToolSend(const http::HttpRequest& req, http::
     }
     else
     {
+        auth::AIQuotaService quotaService;
+        auto quotaCheck = quotaService.checkBeforeAI(userId);
+        if (!quotaCheck.allowed)
+        {
+            sendJson(req, resp,
+                quotaCheck.systemError ? http::HttpResponse::k500InternalServerError : http::HttpResponse::k403Forbidden,
+                quotaCheck.systemError ? "Internal Server Error" : "Forbidden",
+                json{{"success", false}, {"message", quotaCheck.message}},
+                true);
+            return;
+        }
+
         try
         {
             answer = callAiSummary(
                 service.buildToolSummaryPrompt(question, toolName, toolResult),
-                jsonString(requestBody, "modelType"));
+                modelType);
+            if (answer.empty())
+            {
+                quotaService.logAIUsage(userId, "/chat/fitness-tool-send", modelType,
+                    false, false, "AI returned empty tool summary");
+                answer = "AI 未返回可用回答";
+            }
+            else
+            {
+                quotaService.consumeQuotaOnSuccess(userId, "/chat/fitness-tool-send", modelType);
+            }
         }
         catch (const std::exception& e)
         {
+            quotaService.logAIUsage(userId, "/chat/fitness-tool-send", modelType,
+                false, false, e.what());
             answer = std::string("工具调用已完成，但 AI 总结失败: ") + e.what() + "\n\n工具结果：\n" + toolResult.dump(2);
         }
     }
@@ -736,6 +762,9 @@ void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, 
     writer.sendStatus("正在分析你的问题");
 
     std::thread([writer, requestBody, question, modelType, userId]() mutable {
+        auth::AIQuotaService quotaService;
+        bool aiCallStarted = false;
+        bool quotaFinalized = false;
         try
         {
             http::MysqlUtil mysqlUtil;
@@ -746,10 +775,28 @@ void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, 
             if (toolName.empty())
             {
                 writer.sendStatus("未匹配到工具，切换为普通 AI 教练回答");
+                auto quotaCheck = quotaService.checkBeforeAI(userId);
+                if (!quotaCheck.allowed)
+                {
+                    writer.sendError(quotaCheck.message);
+                    writer.sendDone();
+                    writer.close();
+                    return;
+                }
+
+                aiCallStarted = true;
                 std::string answer = streamPromptWithFallback(writer, buildCoachFallbackPrompt(question), modelType);
                 if (answer.empty())
                 {
+                    quotaService.logAIUsage(userId, "/chat/fitness-tool-send-stream", modelType,
+                        false, false, "AI returned empty tool fallback answer");
+                    quotaFinalized = true;
                     writer.sendError("AI 未返回可用回答");
+                }
+                else
+                {
+                    quotaService.consumeQuotaOnSuccess(userId, "/chat/fitness-tool-send-stream", modelType);
+                    quotaFinalized = true;
                 }
                 writer.sendDone();
                 writer.close();
@@ -782,16 +829,39 @@ void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, 
             writer.sendEvent("tool_result", json{{"toolName", toolName}, {"result", toolResult}}.dump());
             writer.sendStatus("正在基于工具结果生成回答");
 
+            auto quotaCheck = quotaService.checkBeforeAI(userId);
+            if (!quotaCheck.allowed)
+            {
+                writer.sendError(quotaCheck.message);
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
             std::string prompt = service.buildToolSummaryPrompt(question, toolName, toolResult);
+            aiCallStarted = true;
             std::string answer = streamPromptWithFallback(writer, prompt, modelType);
             if (answer.empty())
             {
+                quotaService.logAIUsage(userId, "/chat/fitness-tool-send-stream", modelType,
+                    false, false, "AI returned empty tool summary");
+                quotaFinalized = true;
                 writer.sendError("AI 未返回可用回答");
+            }
+            else
+            {
+                quotaService.consumeQuotaOnSuccess(userId, "/chat/fitness-tool-send-stream", modelType);
+                quotaFinalized = true;
             }
             writer.sendDone();
         }
         catch (const std::exception& e)
         {
+            if (aiCallStarted && !quotaFinalized)
+            {
+                quotaService.logAIUsage(userId, "/chat/fitness-tool-send-stream", modelType,
+                    false, false, e.what());
+            }
             writer.sendError(std::string("健身工具流式问答失败: ") + e.what());
             writer.sendDone();
         }

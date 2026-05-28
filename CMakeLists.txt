@@ -85,6 +85,12 @@ add_executable(fitness_tools_test
 
 add_test(NAME fitness_tools_test COMMAND fitness_tools_test)
 
+add_executable(ai_quota_service_test
+    ${PROJECT_SOURCE_DIR}/tests/ai_quota_service_test.cpp
+)
+
+add_test(NAME ai_quota_service_test COMMAND ai_quota_service_test)
+
 target_link_libraries(http_server
     pthread
     muduo_net

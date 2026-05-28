@@ -2,6 +2,7 @@
 
 #include "../../include/AIUtil/AIHelper.h"
 #include "../../include/AIUtil/AIFactory.h"
+#include "AIApps/ChatServer/include/auth/AIQuotaService.h"
 #include "../../include/rag/FitnessRagService.h"
 
 #include <algorithm>
@@ -229,7 +230,9 @@ void FitnessRagHandler::handleChatRag(const http::HttpRequest& req, http::HttpRe
     {
         return;
     }
-    (void)userId;
+    std::string modelType;
+    bool aiCallStarted = false;
+    bool quotaFinalized = false;
 
     json requestBody;
     std::string errorMessage;
@@ -266,19 +269,46 @@ void FitnessRagHandler::handleChatRag(const http::HttpRequest& req, http::HttpRe
         return;
     }
 
+    modelType = jsonString(requestBody, "modelType");
+    auth::AIQuotaService quotaService;
+    auto quotaCheck = quotaService.checkBeforeAI(userId);
+    if (!quotaCheck.allowed)
+    {
+        sendJson(req, resp,
+            quotaCheck.systemError ? http::HttpResponse::k500InternalServerError : http::HttpResponse::k403Forbidden,
+            quotaCheck.systemError ? "Internal Server Error" : "Forbidden",
+            json{{"success", false}, {"message", quotaCheck.message}},
+            true);
+        return;
+    }
+
     try
     {
         std::string prompt = service.buildRagPrompt(question, results);
-        std::string answer = callAiWithPrompt(prompt, jsonString(requestBody, "modelType"));
+        aiCallStarted = true;
+        std::string answer = callAiWithPrompt(prompt, modelType);
         if (answer.empty())
         {
+            quotaService.logAIUsage(userId, "/chat/rag-send", modelType,
+                false, false, "AI returned empty RAG answer");
+            quotaFinalized = true;
             answer = "AI 未返回可用回答";
+        }
+        else
+        {
+            quotaService.consumeQuotaOnSuccess(userId, "/chat/rag-send", modelType);
+            quotaFinalized = true;
         }
         sendJson(req, resp, http::HttpResponse::k200Ok, "OK",
             json{{"success", true}, {"answer", answer}, {"retrievedChunks", searchResultsToJson(results)}}, false);
     }
     catch (const std::exception& e)
     {
+        if (aiCallStarted && !quotaFinalized)
+        {
+            quotaService.logAIUsage(userId, "/chat/rag-send", modelType,
+                false, false, e.what());
+        }
         sendJson(req, resp, http::HttpResponse::k500InternalServerError, "Internal Server Error",
             json{{"success", false}, {"message", std::string("RAG 问答失败: ") + e.what()},
                  {"retrievedChunks", searchResultsToJson(results)}},
@@ -312,8 +342,6 @@ void FitnessRagHandler::handleChatRagStream(const http::HttpRequest& req, http::
         writer.close();
         return;
     }
-    (void)userId;
-
     json requestBody;
     std::string errorMessage;
     if (!parseJsonBody(req, requestBody, errorMessage))
@@ -337,7 +365,10 @@ void FitnessRagHandler::handleChatRagStream(const http::HttpRequest& req, http::
     std::string modelType = jsonString(requestBody, "modelType");
 
     writer.sendStatus("正在检索健身知识库");
-    std::thread([writer, question, modelType, topK]() mutable {
+    std::thread([writer, question, modelType, topK, userId]() mutable {
+        auth::AIQuotaService quotaService;
+        bool aiCallStarted = false;
+        bool quotaFinalized = false;
         try
         {
             rag::FitnessRagService service;
@@ -359,6 +390,15 @@ void FitnessRagHandler::handleChatRagStream(const http::HttpRequest& req, http::
                 return;
             }
 
+            auto quotaCheck = quotaService.checkBeforeAI(userId);
+            if (!quotaCheck.allowed)
+            {
+                writer.sendError(quotaCheck.message);
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+
             writer.sendEvent("retrieved", json{{"chunks", searchResultsToJson(results)}}.dump());
             writer.sendStatus("正在基于参考片段生成回答");
 
@@ -366,6 +406,7 @@ void FitnessRagHandler::handleChatRagStream(const http::HttpRequest& req, http::
             std::string answer;
             try
             {
+                aiCallStarted = true;
                 answer = streamAiWithPrompt(prompt, modelType, [&writer](const std::string& chunk) {
                     if (!chunk.empty())
                     {
@@ -382,6 +423,7 @@ void FitnessRagHandler::handleChatRagStream(const http::HttpRequest& req, http::
             {
                 try
                 {
+                    aiCallStarted = true;
                     answer = callAiWithPrompt(prompt, modelType);
                     if (!answer.empty())
                     {
@@ -390,6 +432,9 @@ void FitnessRagHandler::handleChatRagStream(const http::HttpRequest& req, http::
                 }
                 catch (const std::exception& e)
                 {
+                    quotaService.logAIUsage(userId, "/chat/rag-send-stream", modelType,
+                        false, false, e.what());
+                    quotaFinalized = true;
                     writer.sendError(std::string("AI 回答失败: ") + e.what());
                     writer.sendDone();
                     writer.close();
@@ -399,12 +444,25 @@ void FitnessRagHandler::handleChatRagStream(const http::HttpRequest& req, http::
 
             if (answer.empty())
             {
+                quotaService.logAIUsage(userId, "/chat/rag-send-stream", modelType,
+                    false, false, "AI returned empty RAG answer");
+                quotaFinalized = true;
                 writer.sendError("AI 未返回可用回答");
+            }
+            else
+            {
+                quotaService.consumeQuotaOnSuccess(userId, "/chat/rag-send-stream", modelType);
+                quotaFinalized = true;
             }
             writer.sendDone();
         }
         catch (const std::exception& e)
         {
+            if (aiCallStarted && !quotaFinalized)
+            {
+                quotaService.logAIUsage(userId, "/chat/rag-send-stream", modelType,
+                    false, false, e.what());
+            }
             writer.sendError(std::string("RAG 流式问答失败: ") + e.what());
             writer.sendDone();
         }

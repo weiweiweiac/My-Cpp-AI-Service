@@ -1,8 +1,16 @@
 #include "../include/handlers/ChatSendHandler.h"
 
+#include "AIApps/ChatServer/include/auth/AIQuotaService.h"
+
 
 void ChatSendHandler::handle(const http::HttpRequest& req, http::HttpResponse* resp)
 {
+    int userId = 0;
+    std::string modelType = "1";
+    bool aiCallStarted = false;
+    bool quotaFinalized = false;
+    const std::string endpoint = "/chat/send";
+
     try
     {
 
@@ -23,11 +31,10 @@ void ChatSendHandler::handle(const http::HttpRequest& req, http::HttpResponse* r
         }
 
 
-        int userId = std::stoi(session->getValue("userId"));
+        userId = std::stoi(session->getValue("userId"));
         std::string username = session->getValue("username");
 
         std::string userQuestion;
-        std::string modelType;
         std::string sessionId;
 
         auto body = req.getBody();
@@ -37,6 +44,21 @@ void ChatSendHandler::handle(const http::HttpRequest& req, http::HttpResponse* r
             if (j.contains("sessionId")) sessionId = j["sessionId"];
 
             modelType = j.contains("modelType") ? j["modelType"].get<std::string>() : "1";
+        }
+
+        auth::AIQuotaService quotaService;
+        auto quotaCheck = quotaService.checkBeforeAI(userId);
+        if (!quotaCheck.allowed)
+        {
+            json errorResp;
+            errorResp["success"] = false;
+            errorResp["message"] = quotaCheck.message;
+            std::string errorBody = errorResp.dump(4);
+            server_->packageResp(req.getVersion(),
+                quotaCheck.systemError ? http::HttpResponse::k500InternalServerError : http::HttpResponse::k403Forbidden,
+                quotaCheck.systemError ? "Internal Server Error" : "Forbidden",
+                true, "application/json", errorBody.size(), errorBody, resp);
+            return;
         }
 
 
@@ -57,7 +79,19 @@ void ChatSendHandler::handle(const http::HttpRequest& req, http::HttpResponse* r
         }
         
 
+        aiCallStarted = true;
         std::string aiInformation=AIHelperPtr->chat(userId, username,sessionId, userQuestion, modelType);
+        if (aiInformation.empty())
+        {
+            quotaService.logAIUsage(userId, endpoint, modelType,
+                false, false, "AI returned empty response");
+            quotaFinalized = true;
+        }
+        else
+        {
+            quotaService.consumeQuotaOnSuccess(userId, endpoint, modelType);
+            quotaFinalized = true;
+        }
         json successResp;
         successResp["success"] = true;
         successResp["Information"] = aiInformation;
@@ -72,6 +106,11 @@ void ChatSendHandler::handle(const http::HttpRequest& req, http::HttpResponse* r
     }
     catch (const std::exception& e)
     {
+        if (aiCallStarted && !quotaFinalized)
+        {
+            auth::AIQuotaService quotaService;
+            quotaService.logAIUsage(userId, endpoint, modelType, false, false, e.what());
+        }
 
         json failureResp;
         failureResp["status"] = "error";

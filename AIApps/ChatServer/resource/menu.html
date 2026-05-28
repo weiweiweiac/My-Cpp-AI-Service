@@ -283,6 +283,94 @@
             color: #d9fff0;
         }
 
+        .account-status {
+            margin-top: 22px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(125, 255, 184, 0.18);
+        }
+
+        .account-status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .account-status h3 {
+            margin: 0 0 6px;
+            font-size: 18px;
+            color: var(--text);
+        }
+
+        .account-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .account-metric {
+            min-height: 74px;
+            padding: 11px;
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .account-metric span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .account-metric strong {
+            display: block;
+            margin-top: 8px;
+            color: var(--green);
+            font-size: 18px;
+        }
+
+        .quota-warning {
+            margin: 10px 0;
+            padding: 10px 12px;
+            border: 1px solid rgba(255, 107, 107, 0.34);
+            border-radius: 8px;
+            color: #ffe0e0;
+            background: rgba(255, 107, 107, 0.12);
+            line-height: 1.5;
+            font-size: 13px;
+        }
+
+        .usage-list {
+            display: grid;
+            gap: 8px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
+        .usage-row {
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .usage-row:last-child {
+            border-bottom: 0;
+        }
+
+        .usage-row strong {
+            display: block;
+            color: var(--green);
+            word-break: break-word;
+        }
+
+        .usage-row em {
+            color: var(--muted);
+            font-style: normal;
+        }
+
         .workspace-panel {
             display: none;
             margin-top: 18px;
@@ -658,6 +746,7 @@
             .dashboard,
             .menu-grid,
             .status-panel,
+            .account-metrics,
             .profile-form,
             .plan-controls,
             .record-summary,
@@ -762,6 +851,34 @@
                     <li>条件：训练时间、器械、伤病限制</li>
                     <li>记录：重量、组数、次数、RPE/RIR、休息时间</li>
                 </ul>
+
+                <section class="account-status" id="account-status-panel" aria-label="账号状态和 AI 免费额度">
+                    <div class="account-status-header">
+                        <div>
+                            <h3>账号状态 / AI 免费额度</h3>
+                            <p id="account-summary">正在读取账号状态...</p>
+                        </div>
+                        <button type="button" class="small-btn" id="refresh-ai-usage">刷新使用记录</button>
+                    </div>
+                    <div class="account-metrics">
+                        <div class="account-metric">
+                            <span>当前角色</span>
+                            <strong id="account-role">-</strong>
+                        </div>
+                        <div class="account-metric">
+                            <span>已用 / 总次数</span>
+                            <strong id="account-quota-used">-</strong>
+                        </div>
+                        <div class="account-metric">
+                            <span>剩余次数</span>
+                            <strong id="account-quota-remaining">-</strong>
+                        </div>
+                    </div>
+                    <p class="quota-warning" id="account-quota-warning" hidden>免费 AI 试用次数已用完，请联系管理员或等待后续支持自带 API Key。</p>
+                    <div class="usage-list" id="ai-usage-list">
+                        <p class="muted">暂无 AI 使用记录。</p>
+                    </div>
+                </section>
             </aside>
         </section>
 
@@ -1044,6 +1161,10 @@
                     }, 300);
                 }
             }, 120);
+
+            if (sessionStorage.getItem('userId')) {
+                refreshAccountPanelQuietly();
+            }
         });
 
         window.addEventListener('load', function () {
@@ -1084,7 +1205,13 @@
                 throw new Error('请先登录');
             }
             if (!res.ok || data.success === false) {
+                if (isQuotaMessage(data.message)) {
+                    refreshAccountPanelQuietly();
+                }
                 throw new Error(data.message || '请求失败');
+            }
+            if (isQuotaTrackedUrl(url)) {
+                refreshAccountPanelQuietly();
             }
             return data;
         }
@@ -1118,6 +1245,12 @@
                 payload = JSON.parse(evt.data);
             } catch (err) {
                 payload = { content: evt.data, message: evt.data };
+            }
+            if (evt.event === 'error' && isQuotaMessage(payload.message)) {
+                refreshAccountPanelQuietly();
+            }
+            if (evt.event === 'done') {
+                refreshAccountPanelQuietly();
             }
             if (handlers[evt.event]) {
                 handlers[evt.event](payload);
@@ -1240,6 +1373,81 @@
 
         function formatJson(data) {
             return JSON.stringify(data, null, 2);
+        }
+
+        function isQuotaMessage(message) {
+            return String(message || '').includes('免费 AI 试用次数已用完');
+        }
+
+        function isQuotaTrackedUrl(url) {
+            const path = String(url || '').split('?')[0];
+            return [
+                '/chat/send',
+                '/chat/rag-send',
+                '/chat/fitness-tool-send',
+                '/fitness/calendar/generate-plan'
+            ].includes(path);
+        }
+
+        function roleText(user) {
+            return user && user.isAdmin ? '超级用户' : '普通用户';
+        }
+
+        function renderAccountStatus(user) {
+            const safeUser = user || {};
+            const total = Number(safeUser.aiQuotaTotal || 0);
+            const used = Number(safeUser.aiQuotaUsed || 0);
+            const remaining = Number(safeUser.aiQuotaRemaining || 0);
+            document.getElementById('account-summary').textContent =
+                `${safeUser.username || '当前用户'} · ${roleText(safeUser)}`;
+            document.getElementById('account-role').textContent = roleText(safeUser);
+            document.getElementById('account-quota-used').textContent =
+                safeUser.isAdmin ? '不限' : `${used} / ${total}`;
+            document.getElementById('account-quota-remaining').textContent =
+                safeUser.isAdmin ? '不限' : String(remaining);
+            document.getElementById('account-quota-warning').hidden =
+                Boolean(safeUser.isAdmin) || remaining > 0;
+        }
+
+        function renderAIUsage(usage) {
+            const list = document.getElementById('ai-usage-list');
+            const rows = (usage || []).slice(0, 10);
+            if (!rows.length) {
+                list.innerHTML = '<p class="muted">暂无 AI 使用记录。</p>';
+                return;
+            }
+
+            list.innerHTML = rows.map(item => {
+                const status = item.success ? '成功' : '失败';
+                const consumed = item.quotaConsumed ? '已扣额度' : '未扣额度';
+                const errorText = item.errorMessage ? `<div class="muted">${escapeHtml(item.errorMessage)}</div>` : '';
+                return `
+                    <div class="usage-row">
+                        <strong>${escapeHtml(item.endpoint || '-')}</strong>
+                        <em>${escapeHtml(item.createdAt || '')} · ${escapeHtml(item.modelType || '-')} · ${status} · ${consumed}</em>
+                        ${errorText}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadAccountStatus() {
+            const data = await apiFetch('/user/me', { method: 'GET', headers: { 'Accept': 'application/json' } });
+            renderAccountStatus(data.user);
+        }
+
+        async function loadAIUsage() {
+            const data = await apiFetch('/user/ai-usage?limit=10', { method: 'GET', headers: { 'Accept': 'application/json' } });
+            renderAIUsage(data.usage || []);
+        }
+
+        function refreshAccountPanelQuietly() {
+            Promise.all([loadAccountStatus(), loadAIUsage()]).catch(err => {
+                const summary = document.getElementById('account-summary');
+                if (summary) {
+                    summary.textContent = err.message || '账号状态读取失败';
+                }
+            });
         }
 
         function valueOr(value, fallback) {
@@ -1965,6 +2173,7 @@
         document.getElementById('load-tools-btn').addEventListener('click', loadTools);
         document.getElementById('call-tool-btn').addEventListener('click', callFitnessTool);
         document.getElementById('tool-answer-btn').addEventListener('click', askFitnessTool);
+        document.getElementById('refresh-ai-usage').addEventListener('click', refreshAccountPanelQuietly);
 
         document.getElementById('logout').addEventListener('click', () => {
             const userId = sessionStorage.getItem('userId');

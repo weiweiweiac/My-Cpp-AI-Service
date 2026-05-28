@@ -1,5 +1,7 @@
 #include "../include/handlers/ChatStreamHandler.h"
 
+#include "AIApps/ChatServer/include/auth/AIQuotaService.h"
+
 #include <memory>
 #include <mutex>
 #include <string>
@@ -54,6 +56,17 @@ void ChatStreamHandler::handle(const http::HttpRequest& req, http::HttpStreamWri
         int userId = std::stoi(session->getValue("userId"));
         std::string username = session->getValue("username");
 
+        auth::AIQuotaService quotaService;
+        auto quotaCheck = quotaService.checkBeforeAI(userId);
+        if (!quotaCheck.allowed)
+        {
+            writer.sendSseHeader();
+            writer.sendError(quotaCheck.message);
+            writer.sendDone();
+            writer.close();
+            return;
+        }
+
         std::shared_ptr<AIHelper> helper;
         {
             std::lock_guard<std::mutex> lock(server_->mutexForChatInformation);
@@ -69,6 +82,8 @@ void ChatStreamHandler::handle(const http::HttpRequest& req, http::HttpStreamWri
         writer.sendStatus("accepted");
 
         std::thread([helper, writer, userId, username, sessionId, userQuestion, modelType]() mutable {
+            auth::AIQuotaService quotaService;
+            bool quotaFinalized = false;
             try
             {
                 writer.sendStatus("calling_ai");
@@ -84,12 +99,24 @@ void ChatStreamHandler::handle(const http::HttpRequest& req, http::HttpStreamWri
 
                 if (fullText.empty())
                 {
+                    quotaService.logAIUsage(userId, "/chat/send-stream", modelType,
+                        false, false, "AI returned empty response");
                     writer.sendError("AI returned empty response");
+                }
+                else
+                {
+                    quotaService.consumeQuotaOnSuccess(userId, "/chat/send-stream", modelType);
+                    quotaFinalized = true;
                 }
                 writer.sendDone();
             }
             catch (const std::exception& e)
             {
+                if (!quotaFinalized)
+                {
+                    quotaService.logAIUsage(userId, "/chat/send-stream", modelType,
+                        false, false, e.what());
+                }
                 writer.sendError(std::string("stream failed: ") + e.what());
                 writer.sendDone();
             }
