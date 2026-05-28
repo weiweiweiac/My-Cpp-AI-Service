@@ -411,6 +411,8 @@
         .profile-form,
         .plan-controls,
         .record-summary,
+        .exercise-search,
+        .exercise-form,
         .knowledge-grid,
         .tool-grid {
             display: grid;
@@ -613,6 +615,87 @@
             background: rgba(255, 255, 255, 0.045);
         }
 
+        .exercise-layout {
+            display: grid;
+            grid-template-columns: 0.82fr 1.18fr;
+            gap: 18px;
+            margin-top: 18px;
+            align-items: start;
+        }
+
+        .exercise-search {
+            margin-bottom: 4px;
+        }
+
+        .exercise-form {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .exercise-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .exercise-card {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.045);
+        }
+
+        .exercise-card-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .exercise-card h3 {
+            margin: 0 0 8px;
+            font-size: 18px;
+            line-height: 1.35;
+        }
+
+        .exercise-meta {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin: 10px 0;
+        }
+
+        .exercise-meta span {
+            min-height: 34px;
+            padding: 8px;
+            border: 1px solid rgba(125, 255, 184, 0.16);
+            border-radius: 8px;
+            color: #dfffee;
+            background: rgba(2, 12, 10, 0.38);
+            font-size: 12px;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+
+        .exercise-card p {
+            margin: 8px 0 0;
+            color: var(--muted);
+            line-height: 1.6;
+            word-break: break-word;
+        }
+
+        .exercise-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .badge.custom {
+            color: #06110f;
+            background: var(--cyan);
+        }
+
         .plan-content {
             margin: 12px 0 0;
             color: #dfffee;
@@ -737,8 +820,13 @@
             }
 
             .day-layout,
-            .record-row {
+            .record-row,
+            .exercise-layout {
                 grid-template-columns: 1fr;
+            }
+
+            .exercise-meta {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
@@ -750,6 +838,8 @@
             .profile-form,
             .plan-controls,
             .record-summary,
+            .exercise-search,
+            .exercise-form,
             .knowledge-grid,
             .tool-grid {
                 grid-template-columns: 1fr;
@@ -768,6 +858,10 @@
 
             .form-field.wide {
                 grid-column: 1;
+            }
+
+            .exercise-meta {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -820,6 +914,11 @@
                     <span class="option-code">PLAN</span>
                     <h2>生成计划 / 训练日历</h2>
                     <p>基于当前档案生成未来 7 天计划，也可以直接打开某一天记录训练。</p>
+                </div>
+                <div class="menu-option" id="exercise-service">
+                    <span class="option-code">LIB</span>
+                    <h2>动作库</h2>
+                    <p>查看系统内置动作，并维护只属于自己的自定义动作，后续训练模板会复用这里的数据。</p>
                 </div>
                 <div class="menu-option primary" id="chat-service">
                     <span class="option-code">COACH</span>
@@ -943,6 +1042,96 @@
                     <button type="submit" class="save-btn">保存档案</button>
                 </div>
             </form>
+        </section>
+
+        <section class="panel workspace-panel" id="exercise-panel" aria-label="动作库">
+            <div class="panel-header">
+                <div>
+                    <h2>动作库</h2>
+                    <p>系统动作保持只读；自定义动作只对当前账号可见，可用于后续训练模板和更细粒度训练记录。</p>
+                </div>
+                <div class="status-text" id="exercise-status">打开后自动读取动作库</div>
+            </div>
+
+            <form class="exercise-search" id="exercise-search-form">
+                <div class="form-field">
+                    <label for="exercise-keyword">关键词</label>
+                    <input id="exercise-keyword" maxlength="100" placeholder="卧推、划船、核心">
+                </div>
+                <div class="form-field">
+                    <label for="exercise-category-filter">分类</label>
+                    <select id="exercise-category-filter">
+                        <option value="">全部分类</option>
+                        <option value="胸">胸</option>
+                        <option value="背">背</option>
+                        <option value="腿">腿</option>
+                        <option value="肩">肩</option>
+                        <option value="手臂">手臂</option>
+                        <option value="核心">核心</option>
+                        <option value="有氧">有氧</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="exercise-primary-muscle-filter">目标肌群</label>
+                    <input id="exercise-primary-muscle-filter" maxlength="100" placeholder="胸大肌、背阔肌">
+                </div>
+                <div class="actions">
+                    <button type="button" class="ghost-btn" id="exercise-reset-filters">重置</button>
+                    <button type="submit" class="save-btn">搜索动作</button>
+                </div>
+            </form>
+
+            <div class="exercise-layout">
+                <div class="record-box">
+                    <h3 id="exercise-form-title">新增自定义动作</h3>
+                    <form class="exercise-form" id="exercise-form">
+                        <div class="form-field">
+                            <label for="exercise-name">动作名称</label>
+                            <input id="exercise-name" maxlength="100" placeholder="自定义哑铃推胸" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="exercise-category">分类</label>
+                            <input id="exercise-category" maxlength="50" placeholder="胸">
+                        </div>
+                        <div class="form-field">
+                            <label for="exercise-primary-muscle">目标肌群</label>
+                            <input id="exercise-primary-muscle" maxlength="100" placeholder="胸大肌">
+                        </div>
+                        <div class="form-field">
+                            <label for="exercise-secondary-muscles">辅助肌群</label>
+                            <input id="exercise-secondary-muscles" maxlength="255" placeholder="三角肌前束,肱三头肌">
+                        </div>
+                        <div class="form-field">
+                            <label for="exercise-equipment">器械</label>
+                            <input id="exercise-equipment" maxlength="100" placeholder="哑铃">
+                        </div>
+                        <div class="form-field">
+                            <label for="exercise-difficulty">难度</label>
+                            <input id="exercise-difficulty" maxlength="50" placeholder="初级">
+                        </div>
+                        <div class="form-field full">
+                            <label for="exercise-description">动作说明</label>
+                            <textarea id="exercise-description" maxlength="2000" placeholder="写下动作目的、适用场景或关键过程"></textarea>
+                        </div>
+                        <div class="form-field full">
+                            <label for="exercise-tips">注意事项</label>
+                            <textarea id="exercise-tips" maxlength="2000" placeholder="写下安全提示、常见错误或发力要点"></textarea>
+                        </div>
+                        <div class="actions">
+                            <button type="button" class="ghost-btn" id="exercise-clear-form">清空表单</button>
+                            <button type="button" class="ghost-btn" id="exercise-cancel-edit" hidden>取消编辑</button>
+                            <button type="submit" class="save-btn" id="exercise-save-btn">保存自定义动作</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="record-box">
+                    <h3>动作列表</h3>
+                    <div class="exercise-list" id="exercise-list">
+                        <p class="muted">打开动作库后自动加载。</p>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <section class="panel workspace-panel" id="calendar-panel" aria-label="训练计划和日历">
@@ -1138,10 +1327,11 @@
     </main>
 
     <script>
-        const panels = ['profile-panel', 'calendar-panel', 'records-panel', 'knowledge-panel', 'tools-panel'];
+        const panels = ['profile-panel', 'exercise-panel', 'calendar-panel', 'records-panel', 'knowledge-panel', 'tools-panel'];
         let activeCalendar = [];
         let currentDate = '';
         let currentCalendarId = null;
+        let editingExerciseId = null;
 
         document.addEventListener('DOMContentLoaded', function () {
             const progressBar = document.querySelector('.progress-bar-inner');
@@ -1505,6 +1695,192 @@
                 await loadProfile();
             } catch (err) {
                 setStatus('profile-status', err.message || '读取档案失败', true);
+            }
+        }
+
+        function buildExerciseListUrl() {
+            const params = [];
+            const keyword = document.getElementById('exercise-keyword').value.trim();
+            const category = document.getElementById('exercise-category-filter').value;
+            const primaryMuscle = document.getElementById('exercise-primary-muscle-filter').value.trim();
+            if (keyword) {
+                params.push('keyword=' + encodeURIComponent(keyword));
+            }
+            if (category) {
+                params.push('category=' + encodeURIComponent(category));
+            }
+            if (primaryMuscle) {
+                params.push('primary_muscle=' + encodeURIComponent(primaryMuscle));
+            }
+            return '/fitness/exercises/list' + (params.length ? '?' + params.join('&') : '');
+        }
+
+        function readExercisePayload() {
+            return {
+                name: document.getElementById('exercise-name').value.trim(),
+                category: document.getElementById('exercise-category').value.trim(),
+                primaryMuscle: document.getElementById('exercise-primary-muscle').value.trim(),
+                secondaryMuscles: document.getElementById('exercise-secondary-muscles').value.trim(),
+                equipment: document.getElementById('exercise-equipment').value.trim(),
+                difficulty: document.getElementById('exercise-difficulty').value.trim(),
+                description: document.getElementById('exercise-description').value.trim(),
+                tips: document.getElementById('exercise-tips').value.trim()
+            };
+        }
+
+        function fillExerciseForm(exercise) {
+            document.getElementById('exercise-name').value = fieldValue(exercise, 'name', '');
+            document.getElementById('exercise-category').value = fieldValue(exercise, 'category', '');
+            document.getElementById('exercise-primary-muscle').value = fieldValue(exercise, 'primaryMuscle', '');
+            document.getElementById('exercise-secondary-muscles').value = fieldValue(exercise, 'secondaryMuscles', '');
+            document.getElementById('exercise-equipment').value = fieldValue(exercise, 'equipment', '');
+            document.getElementById('exercise-difficulty').value = fieldValue(exercise, 'difficulty', '');
+            document.getElementById('exercise-description').value = fieldValue(exercise, 'description', '');
+            document.getElementById('exercise-tips').value = fieldValue(exercise, 'tips', '');
+        }
+
+        function clearExerciseForm() {
+            editingExerciseId = null;
+            document.getElementById('exercise-form').reset();
+            document.getElementById('exercise-form-title').textContent = '新增自定义动作';
+            document.getElementById('exercise-save-btn').textContent = '保存自定义动作';
+            document.getElementById('exercise-cancel-edit').hidden = true;
+        }
+
+        function editExercise(exercise) {
+            if (exercise.isSystem) {
+                setStatus('exercise-status', '系统动作不能编辑', true);
+                return;
+            }
+            editingExerciseId = exercise.id;
+            fillExerciseForm(exercise);
+            document.getElementById('exercise-form-title').textContent = '编辑自定义动作';
+            document.getElementById('exercise-save-btn').textContent = '保存修改';
+            document.getElementById('exercise-cancel-edit').hidden = false;
+            setStatus('exercise-status', '正在编辑：' + (exercise.name || '自定义动作'));
+            document.getElementById('exercise-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function renderExerciseList(exercises) {
+            const list = document.getElementById('exercise-list');
+            const rows = exercises || [];
+            list.innerHTML = '';
+            if (!rows.length) {
+                list.innerHTML = '<p class="muted">暂无动作。</p>';
+                return;
+            }
+
+            rows.forEach(exercise => {
+                const card = document.createElement('div');
+                card.className = 'exercise-card';
+                const badgeClass = exercise.isSystem ? '' : ' custom';
+                const badgeText = exercise.isSystem ? '系统动作' : '自定义动作';
+                card.innerHTML = `
+                    <div class="exercise-card-header">
+                        <div>
+                            <h3>${escapeHtml(exercise.name || '未命名动作')}</h3>
+                            <div class="badge-row">
+                                <span class="badge${badgeClass}">${badgeText}</span>
+                                <span class="badge rest">${escapeHtml(exercise.category || '未分类')}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="exercise-meta">
+                        <span>目标：${escapeHtml(exercise.primaryMuscle || '-')}</span>
+                        <span>辅助：${escapeHtml(exercise.secondaryMuscles || '-')}</span>
+                        <span>器械：${escapeHtml(exercise.equipment || '-')}</span>
+                        <span>难度：${escapeHtml(exercise.difficulty || '-')}</span>
+                    </div>
+                    <p>${escapeHtml(exercise.description || '暂无动作说明。')}</p>
+                    <p>${escapeHtml(exercise.tips || '暂无注意事项。')}</p>
+                `;
+
+                if (!exercise.isSystem) {
+                    const actions = document.createElement('div');
+                    actions.className = 'exercise-actions';
+                    const editButton = document.createElement('button');
+                    editButton.type = 'button';
+                    editButton.className = 'small-btn primary';
+                    editButton.textContent = '编辑';
+                    editButton.addEventListener('click', () => editExercise(exercise));
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.type = 'button';
+                    deleteButton.className = 'danger-btn small-btn';
+                    deleteButton.textContent = '删除';
+                    deleteButton.addEventListener('click', () => deleteExercise(exercise));
+
+                    actions.appendChild(editButton);
+                    actions.appendChild(deleteButton);
+                    card.appendChild(actions);
+                }
+
+                list.appendChild(card);
+            });
+        }
+
+        async function loadExercises() {
+            setStatus('exercise-status', '正在读取动作库...');
+            const data = await apiFetch(buildExerciseListUrl(), { method: 'GET', headers: { 'Accept': 'application/json' } });
+            renderExerciseList(data.exercises || []);
+            setStatus('exercise-status', data.exercises && data.exercises.length ? '动作库已加载' : '暂无动作');
+        }
+
+        async function openExercisePanel() {
+            showPanel('exercise-panel');
+            try {
+                await loadExercises();
+            } catch (err) {
+                renderExerciseList([]);
+                setStatus('exercise-status', err.message || '读取动作库失败', true);
+            }
+        }
+
+        async function saveExercise(event) {
+            event.preventDefault();
+            const payload = readExercisePayload();
+            if (editingExerciseId) {
+                payload.id = editingExerciseId;
+            }
+
+            const url = editingExerciseId ? '/fitness/exercises/update' : '/fitness/exercises/create';
+            setStatus('exercise-status', editingExerciseId ? '正在保存动作修改...' : '正在创建自定义动作...');
+            try {
+                const data = await apiFetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                clearExerciseForm();
+                await loadExercises();
+                setStatus('exercise-status', data.message || '动作已保存');
+            } catch (err) {
+                setStatus('exercise-status', err.message || '动作保存失败', true);
+            }
+        }
+
+        async function deleteExercise(exercise) {
+            if (exercise.isSystem) {
+                setStatus('exercise-status', '系统动作不能删除', true);
+                return;
+            }
+            if (!confirm('确认删除“' + (exercise.name || '这个动作') + '”？')) {
+                return;
+            }
+            setStatus('exercise-status', '正在删除动作...');
+            try {
+                const data = await apiFetch('/fitness/exercises/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ id: exercise.id })
+                });
+                if (editingExerciseId === exercise.id) {
+                    clearExerciseForm();
+                }
+                await loadExercises();
+                setStatus('exercise-status', data.message || '动作已删除');
+            } catch (err) {
+                setStatus('exercise-status', err.message || '动作删除失败', true);
             }
         }
 
@@ -2137,6 +2513,29 @@
                 setStatus('profile-status', err.message || '保存档案失败', true);
             }
         });
+
+        document.getElementById('exercise-service').addEventListener('click', openExercisePanel);
+        document.getElementById('exercise-search-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            try {
+                await loadExercises();
+            } catch (err) {
+                renderExerciseList([]);
+                setStatus('exercise-status', err.message || '搜索动作失败', true);
+            }
+        });
+        document.getElementById('exercise-reset-filters').addEventListener('click', async () => {
+            document.getElementById('exercise-search-form').reset();
+            try {
+                await loadExercises();
+            } catch (err) {
+                renderExerciseList([]);
+                setStatus('exercise-status', err.message || '读取动作库失败', true);
+            }
+        });
+        document.getElementById('exercise-form').addEventListener('submit', saveExercise);
+        document.getElementById('exercise-clear-form').addEventListener('click', clearExerciseForm);
+        document.getElementById('exercise-cancel-edit').addEventListener('click', clearExerciseForm);
 
         document.getElementById('plan-service').addEventListener('click', async () => {
             showPanel('calendar-panel');

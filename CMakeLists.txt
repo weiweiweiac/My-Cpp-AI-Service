@@ -91,6 +91,12 @@ add_executable(ai_quota_service_test
 
 add_test(NAME ai_quota_service_test COMMAND ai_quota_service_test)
 
+add_executable(exercise_library_policy_test
+    ${PROJECT_SOURCE_DIR}/tests/exercise_library_policy_test.cpp
+)
+
+add_test(NAME exercise_library_policy_test COMMAND exercise_library_policy_test)
+
 target_link_libraries(http_server
     pthread
     muduo_net
