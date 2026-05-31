@@ -79,7 +79,92 @@
 - `/chat/fitness-tool-send` 支持“问题 -> 工具匹配 -> 工具执行 -> AI 总结”
 - 支持工具调用流式输出
 
-### 7. 用户权限与 AI 免费额度
+### 7. Agent Tool Calling 标准化链路
+
+本轮将原有健身工具调用升级为 Agent Tool Calling 基础版：
+
+```text
+用户问题
+  -> AgentToolRouter 意图识别与工具路由
+  -> AgentToolValidator 参数类型、必填项和范围校验
+  -> AgentToolExecutor 复用 FitnessToolService 执行本地工具
+  -> Tool Result
+  -> LLM 二次总结
+  -> Response / SSE
+```
+
+当前标准化 toolName：
+
+- `bmi_calculator`：BMI 计算，兼容旧工具 `calculate_bmi`
+- `bmr_calculator`：BMR 计算，兼容旧工具 `calculate_bmr`
+- `tdee_calculator`：TDEE 计算，兼容旧工具 `calculate_tdee`
+- `training_volume_calculator`：训练容量计算，兼容旧工具 `calculate_training_volume`
+- `training_record_query`：训练记录查询，兼容旧工具 `get_recent_training_records`
+
+当前参数抽取是 regex/规则基础版，支持从中文自然语言中解析 `cm`、`厘米`、`kg`、`公斤`、`岁`、`次`、`组` 等常见表达。例如：
+
+- `我身高175cm，体重70kg，BMI是多少？` -> `heightCm=175, weightKg=70`
+- `男，22岁，175cm，70kg，每周训练4次，帮我算TDEE` -> `gender=male, age=22, heightCm=175, weightKg=70, activityLevel=moderate`
+- `卧推80kg做8次4组，训练容量是多少？` -> `weight=80, reps=8, sets=4`
+
+`/fitness/tool/call`、`/chat/fitness-tool-send` 和 `/chat/fitness-tool-send-stream` 会返回或发送 `trace`，用于定位工具误选、参数缺失、校验失败、工具执行失败和二次总结失败。trace 当前只返回给前端，不持久化，不记录 API Key、密码等敏感信息，`userMessage` 会截断到 500 字节。
+
+trace 示例：
+
+```json
+{
+  "traceId": "agent-20260531-153012-1234",
+  "type": "agent_tool_call",
+  "userMessage": "我身高175cm，体重70kg，BMI是多少？",
+  "intent": "calculate_bmi",
+  "selectedTool": "bmi_calculator",
+  "arguments": {
+    "heightCm": 175,
+    "weightKg": 70
+  },
+  "validationStatus": "success",
+  "validationError": "",
+  "toolStatus": "success",
+  "toolResultSummary": "BMI=22.86",
+  "needSecondLLMCall": true,
+  "finalAnswerStatus": "success",
+  "errorMessage": "",
+  "createdAt": "2026-05-31 15:30:12"
+}
+```
+
+Agent Tool Calling curl 示例：
+
+```bash
+curl --http1.1 -i -X POST http://127.0.0.1:8080/fitness/tool/call \
+  -H "Content-Type: application/json" \
+  -H "Cookie: sessionId=xxx" \
+  -d '{"message":"我身高175cm，体重70kg，BMI是多少？"}'
+```
+
+```bash
+curl --http1.1 -i -X POST http://127.0.0.1:8080/chat/fitness-tool-send \
+  -H "Content-Type: application/json" \
+  -H "Cookie: sessionId=xxx" \
+  -d '{"message":"男，22岁，175cm，70kg，每周训练4次，帮我算TDEE"}'
+```
+
+```bash
+curl --http1.1 -i -N -X POST http://127.0.0.1:8080/chat/fitness-tool-send-stream \
+  -H "Content-Type: application/json" \
+  -H "Cookie: sessionId=xxx" \
+  -d '{"message":"卧推80kg做8次4组，训练容量是多少？"}'
+```
+
+面试讲解重点：
+
+- ToolRouter 先用规则而不是完全依赖 LLM，是为了保证简历项目可本地验证、结果稳定、成本可控，后续可替换为 Function Calling。
+- Validator 独立于 Router 和 Executor，避免错误参数进入业务工具，也便于返回清晰的缺参和范围错误。
+- 工具调用失败时仍返回 trace，能定位失败发生在路由、校验、执行还是二次总结阶段。
+- trace 让 Agent 调试从“只看最终答案”变成“看完整执行轨迹”。
+- 当前不是完整 MCP Server，也不是多智能体系统；后续可扩展到 MCP Tool Protocol、trace 持久化、工具调用评测和多轮工具调用。
+
+### 8. 用户权限与 AI 免费额度
 
 - 用户角色：
   - `user`：普通用户

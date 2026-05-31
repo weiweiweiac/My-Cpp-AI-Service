@@ -3,6 +3,7 @@
 #include "AIApps/ChatServer/include/auth/AIQuotaService.h"
 #include "../../include/AIUtil/AIHelper.h"
 #include "../../include/AIUtil/AIFactory.h"
+#include "../../include/tools/AgentToolCalling.h"
 #include "../../include/tools/FitnessToolService.h"
 
 #include <algorithm>
@@ -74,6 +75,23 @@ std::string jsonString(const json& body, const std::string& key)
         return trim(body[key].get<std::string>());
     }
     return body[key].dump();
+}
+
+std::string requestQuestion(const json& body)
+{
+    std::string value = jsonString(body, "question");
+    if (value.empty())
+    {
+        value = jsonString(body, "message");
+    }
+    return value;
+}
+
+json requestArguments(const json& body)
+{
+    return body.contains("arguments") && body["arguments"].is_object()
+        ? body["arguments"]
+        : json::object();
 }
 
 int jsonInt(const json& body, const std::string& key, int fallback)
@@ -263,6 +281,11 @@ std::string buildCoachFallbackPrompt(const std::string& question)
 
 std::string toolSelectionReason(const std::string& toolName)
 {
+    if (toolName == "bmi_calculator") return "检测到 BMI 相关问题";
+    if (toolName == "bmr_calculator") return "检测到 BMR 或基础代谢相关问题";
+    if (toolName == "tdee_calculator") return "检测到 TDEE 或每日消耗相关问题";
+    if (toolName == "training_volume_calculator") return "检测到训练容量计算需求";
+    if (toolName == "training_record_query") return "检测到训练记录查询需求";
     if (toolName == "calculate_bmi") return "检测到 BMI 相关问题";
     if (toolName == "calculate_bmr") return "检测到 BMR 或基础代谢相关问题";
     if (toolName == "calculate_tdee") return "检测到 TDEE 或每日消耗相关问题";
@@ -565,7 +588,10 @@ void FitnessToolHandler::handleListTools(const http::HttpRequest& req, http::Htt
 {
     tools::FitnessToolService service;
     sendJson(req, resp, http::HttpResponse::k200Ok, "OK",
-        json{{"success", true}, {"tools", toolsToJson(service.listTools())}}, false);
+        json{{"success", true},
+             {"tools", toolsToJson(service.listTools())},
+             {"agentToolSchemas", agent::agentToolSchemasToJson(agent::defaultAgentToolSchemas())}},
+        false);
 }
 
 void FitnessToolHandler::handleCallTool(const http::HttpRequest& req, http::HttpResponse* resp)
@@ -585,22 +611,60 @@ void FitnessToolHandler::handleCallTool(const http::HttpRequest& req, http::Http
         return;
     }
 
-    std::string toolName = jsonString(requestBody, "toolName");
-    json arguments = requestBody.contains("arguments") && requestBody["arguments"].is_object()
-        ? requestBody["arguments"]
-        : json::object();
-
     MysqlFitnessDataProvider provider(mysqlUtil_);
     tools::FitnessToolService service(&provider);
-    json result = service.callTool(toolName, arguments, userId);
-    bool success = result.value("success", false);
+    auto schemas = agent::defaultAgentToolSchemas();
+    agent::AgentToolRouter router(schemas);
+    agent::AgentToolValidator validator(schemas);
+    agent::AgentToolExecutor executor(service);
+
+    std::string requestedToolName = jsonString(requestBody, "toolName");
+    bool legacyPassthrough = false;
+    agent::AgentToolCall call = router.route(
+        requestQuestion(requestBody),
+        requestArguments(requestBody),
+        requestedToolName,
+        false);
+    if (!call.matched() && !requestedToolName.empty() && service.hasTool(requestedToolName))
+    {
+        call.toolName = requestedToolName;
+        call.legacyToolName = requestedToolName;
+        call.intent = requestedToolName;
+        call.arguments = requestArguments(requestBody);
+        call.confidence = 1.0;
+        legacyPassthrough = true;
+    }
+    agent::AgentTrace trace = agent::AgentTrace::start("tool_call", call);
+
+    auto validation = legacyPassthrough
+        ? agent::AgentToolValidationResult{true, "legacy passthrough", {}}
+        : validator.validate(call);
+    if (!validation.success)
+    {
+        trace.markValidation(false, validation.message);
+        json result = json{{"success", false}, {"message", validation.message}};
+        sendJson(req, resp, http::HttpResponse::k400BadRequest, "Bad Request",
+            json{{"success", false},
+                 {"toolName", call.toolName},
+                 {"result", result},
+                 {"message", validation.message},
+                 {"trace", trace.toJson()}},
+            true);
+        return;
+    }
+    trace.markValidation(true, "");
+
+    agent::AgentToolResult toolResult = executor.execute(call, userId);
+    trace.markToolResult(toolResult.success, toolResult.resultJson);
+    bool success = toolResult.success;
     json body;
     body["success"] = success;
-    body["toolName"] = toolName;
-    body["result"] = result;
-    if (!success && result.contains("message"))
+    body["toolName"] = call.toolName;
+    body["result"] = toolResult.resultJson;
+    body["trace"] = trace.toJson();
+    if (!success && toolResult.resultJson.contains("message"))
     {
-        body["message"] = result["message"];
+        body["message"] = toolResult.resultJson["message"];
     }
     sendJson(req, resp,
         success ? http::HttpResponse::k200Ok : http::HttpResponse::k400BadRequest,
@@ -626,48 +690,100 @@ void FitnessToolHandler::handleChatToolSend(const http::HttpRequest& req, http::
         return;
     }
 
-    std::string question = jsonString(requestBody, "question");
+    std::string question = requestQuestion(requestBody);
     if (question.empty())
     {
         sendJson(req, resp, http::HttpResponse::k400BadRequest, "Bad Request",
-            json{{"success", false}, {"message", "question 不能为空"}}, true);
+            json{{"success", false}, {"message", "question/message 不能为空"}}, true);
         return;
     }
 
     MysqlFitnessDataProvider provider(mysqlUtil_);
     tools::FitnessToolService service(&provider);
-    std::string toolName = service.matchToolName(question);
-    if (toolName.empty())
+    auto schemas = agent::defaultAgentToolSchemas();
+    agent::AgentToolRouter router(schemas);
+    agent::AgentToolValidator validator(schemas);
+    agent::AgentToolExecutor executor(service);
+
+    bool legacyPassthrough = false;
+    agent::AgentToolCall call = router.route(question, requestArguments(requestBody), "", true);
+    if (!call.matched())
     {
+        std::string legacyTool = service.matchToolName(question);
+        if (!legacyTool.empty() && service.hasTool(legacyTool))
+        {
+            call.toolName = legacyTool;
+            call.legacyToolName = legacyTool;
+            call.intent = legacyTool;
+            call.arguments = requestArguments(requestBody);
+            call.confidence = 0.75;
+            call.needSecondLLMCall = true;
+            legacyPassthrough = true;
+        }
+    }
+    agent::AgentTrace trace = agent::AgentTrace::start("agent_tool_call", call);
+    if (!call.matched())
+    {
+        trace.markValidation(false, "未匹配到可用工具");
+        trace.finalAnswerStatus = "fallback_to_chat";
         sendJson(req, resp, http::HttpResponse::k200Ok, "OK",
             json{{"success", true}, {"answer", "这次问题没有匹配到健身工具，请使用 AI 教练对话继续咨询。"},
-                 {"toolName", ""}, {"toolResult", json::object()}},
+                 {"finalAnswer", "这次问题没有匹配到健身工具，请使用 AI 教练对话继续咨询。"},
+                 {"toolName", ""}, {"toolResult", json::object()}, {"trace", trace.toJson()}},
             false);
         return;
     }
 
-    if (toolName == "save_training_record" && !requestBody.contains("arguments"))
+    if (legacyPassthrough && call.legacyToolName == "save_training_record" && !requestBody.contains("arguments"))
     {
+        std::string message = "自然语言记录解析本轮先不做复杂抽取，请在训练记录表单中保存，或使用 /fitness/tool/call 传结构化 records";
+        trace.markValidation(false, message);
         json toolResult = {
             {"success", false},
-            {"message", "自然语言记录解析本轮先不做复杂抽取，请在训练记录表单中保存，或使用 /fitness/tool/call 传结构化 records"}
+            {"message", message}
         };
         sendJson(req, resp, http::HttpResponse::k200Ok, "OK",
-            json{{"success", true}, {"answer", toolResult["message"]}, {"toolName", toolName}, {"toolResult", toolResult}},
+            json{{"success", true},
+                 {"answer", message},
+                 {"finalAnswer", message},
+                 {"toolName", call.toolName},
+                 {"toolResult", toolResult},
+                 {"trace", trace.toJson()}},
             false);
         return;
     }
 
-    json arguments = requestBody.contains("arguments") && requestBody["arguments"].is_object()
-        ? requestBody["arguments"]
-        : json::object();
-    json toolResult = service.callTool(toolName, arguments, userId);
+    auto validation = legacyPassthrough
+        ? agent::AgentToolValidationResult{true, "legacy passthrough", {}}
+        : validator.validate(call);
+    if (!validation.success)
+    {
+        trace.markValidation(false, validation.message);
+        json toolResult = {
+            {"success", false},
+            {"message", validation.message}
+        };
+        sendJson(req, resp, http::HttpResponse::k200Ok, "OK",
+            json{{"success", true},
+                 {"answer", validation.message},
+                 {"finalAnswer", validation.message},
+                 {"toolName", call.toolName},
+                 {"toolResult", toolResult},
+                 {"trace", trace.toJson()}},
+            false);
+        return;
+    }
+    trace.markValidation(true, "");
+
+    agent::AgentToolResult toolResult = executor.execute(call, userId);
+    trace.markToolResult(toolResult.success, toolResult.resultJson);
 
     std::string modelType = jsonString(requestBody, "modelType");
     std::string answer;
-    if (!toolResult.value("success", false))
+    if (!toolResult.success)
     {
-        answer = toolResult.value("message", "工具调用失败");
+        answer = toolResult.resultJson.value("message", "工具调用失败");
+        trace.markFinalAnswer(false, answer);
     }
     else
     {
@@ -675,10 +791,15 @@ void FitnessToolHandler::handleChatToolSend(const http::HttpRequest& req, http::
         auto quotaCheck = quotaService.checkBeforeAI(userId);
         if (!quotaCheck.allowed)
         {
+            trace.markFinalAnswer(false, quotaCheck.message);
             sendJson(req, resp,
                 quotaCheck.systemError ? http::HttpResponse::k500InternalServerError : http::HttpResponse::k403Forbidden,
                 quotaCheck.systemError ? "Internal Server Error" : "Forbidden",
-                json{{"success", false}, {"message", quotaCheck.message}},
+                json{{"success", false},
+                     {"message", quotaCheck.message},
+                     {"toolName", call.toolName},
+                     {"toolResult", toolResult.resultJson},
+                     {"trace", trace.toJson()}},
                 true);
             return;
         }
@@ -686,29 +807,38 @@ void FitnessToolHandler::handleChatToolSend(const http::HttpRequest& req, http::
         try
         {
             answer = callAiSummary(
-                service.buildToolSummaryPrompt(question, toolName, toolResult),
+                service.buildToolSummaryPrompt(question, call.legacyToolName, toolResult.resultJson),
                 modelType);
             if (answer.empty())
             {
                 quotaService.logAIUsage(userId, "/chat/fitness-tool-send", modelType,
                     false, false, "AI returned empty tool summary");
                 answer = "AI 未返回可用回答";
+                trace.markFinalAnswer(false, answer);
             }
             else
             {
                 quotaService.consumeQuotaOnSuccess(userId, "/chat/fitness-tool-send", modelType);
+                trace.markFinalAnswer(true, "");
             }
         }
         catch (const std::exception& e)
         {
             quotaService.logAIUsage(userId, "/chat/fitness-tool-send", modelType,
                 false, false, e.what());
-            answer = std::string("工具调用已完成，但 AI 总结失败: ") + e.what() + "\n\n工具结果：\n" + toolResult.dump(2);
+            answer = std::string("工具调用已完成，但 AI 总结失败: ") + e.what()
+                + "\n\n工具结果：\n" + toolResult.resultJson.dump(2);
+            trace.markFinalAnswer(false, e.what());
         }
     }
 
     sendJson(req, resp, http::HttpResponse::k200Ok, "OK",
-        json{{"success", true}, {"answer", answer}, {"toolName", toolName}, {"toolResult", toolResult}},
+        json{{"success", true},
+             {"answer", answer},
+             {"finalAnswer", answer},
+             {"toolName", call.toolName},
+             {"toolResult", toolResult.resultJson},
+             {"trace", trace.toJson()}},
         false);
 }
 
@@ -749,10 +879,10 @@ void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, 
         return;
     }
 
-    std::string question = jsonString(requestBody, "question");
+    std::string question = requestQuestion(requestBody);
     if (question.empty())
     {
-        writer.sendError("question 不能为空");
+        writer.sendError("question/message 不能为空");
         writer.sendDone();
         writer.close();
         return;
@@ -770,14 +900,41 @@ void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, 
             http::MysqlUtil mysqlUtil;
             MysqlFitnessDataProvider provider(mysqlUtil);
             tools::FitnessToolService service(&provider);
+            auto schemas = agent::defaultAgentToolSchemas();
+            agent::AgentToolRouter router(schemas);
+            agent::AgentToolValidator validator(schemas);
+            agent::AgentToolExecutor executor(service);
 
-            std::string toolName = service.matchToolName(question);
-            if (toolName.empty())
+            bool legacyPassthrough = false;
+            agent::AgentToolCall call = router.route(question, requestArguments(requestBody), "", true);
+            if (!call.matched())
             {
+                std::string legacyTool = service.matchToolName(question);
+                if (!legacyTool.empty() && service.hasTool(legacyTool))
+                {
+                    call.toolName = legacyTool;
+                    call.legacyToolName = legacyTool;
+                    call.intent = legacyTool;
+                    call.arguments = requestArguments(requestBody);
+                    call.confidence = 0.75;
+                    call.needSecondLLMCall = true;
+                    legacyPassthrough = true;
+                }
+            }
+            agent::AgentTrace trace = agent::AgentTrace::start("agent_tool_call_stream", call);
+            writer.sendEvent("trace", trace.toJson().dump());
+
+            if (!call.matched())
+            {
+                trace.markValidation(false, "未匹配到可用工具");
+                trace.finalAnswerStatus = "fallback_to_chat";
+                writer.sendEvent("trace", trace.toJson().dump());
                 writer.sendStatus("未匹配到工具，切换为普通 AI 教练回答");
                 auto quotaCheck = quotaService.checkBeforeAI(userId);
                 if (!quotaCheck.allowed)
                 {
+                    trace.markFinalAnswer(false, quotaCheck.message);
+                    writer.sendEvent("trace", trace.toJson().dump());
                     writer.sendError(quotaCheck.message);
                     writer.sendDone();
                     writer.close();
@@ -791,12 +948,16 @@ void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, 
                     quotaService.logAIUsage(userId, "/chat/fitness-tool-send-stream", modelType,
                         false, false, "AI returned empty tool fallback answer");
                     quotaFinalized = true;
+                    trace.markFinalAnswer(false, "AI 未返回可用回答");
+                    writer.sendEvent("trace", trace.toJson().dump());
                     writer.sendError("AI 未返回可用回答");
                 }
                 else
                 {
                     quotaService.consumeQuotaOnSuccess(userId, "/chat/fitness-tool-send-stream", modelType);
                     quotaFinalized = true;
+                    trace.markFinalAnswer(true, "");
+                    writer.sendEvent("trace", trace.toJson().dump());
                 }
                 writer.sendDone();
                 writer.close();
@@ -804,41 +965,60 @@ void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, 
             }
 
             writer.sendEvent("tool_selected",
-                json{{"toolName", toolName}, {"reason", toolSelectionReason(toolName)}}.dump());
+                json{{"toolName", call.toolName}, {"reason", toolSelectionReason(call.toolName)}}.dump());
 
-            if (toolName == "save_training_record" && !requestBody.contains("arguments"))
+            if (legacyPassthrough && call.legacyToolName == "save_training_record" && !requestBody.contains("arguments"))
             {
-                writer.sendError("自然语言记录解析本轮先不做复杂抽取，请在训练记录表单中保存，或使用 /fitness/tool/call 传结构化 records");
+                std::string message = "自然语言记录解析本轮先不做复杂抽取，请在训练记录表单中保存，或使用 /fitness/tool/call 传结构化 records";
+                trace.markValidation(false, message);
+                writer.sendEvent("trace", trace.toJson().dump());
+                writer.sendError(message);
                 writer.sendDone();
                 writer.close();
                 return;
             }
 
-            json arguments = requestBody.contains("arguments") && requestBody["arguments"].is_object()
-                ? requestBody["arguments"]
-                : json::object();
-            json toolResult = service.callTool(toolName, arguments, userId);
-            if (!toolResult.value("success", false))
+            auto validation = legacyPassthrough
+                ? agent::AgentToolValidationResult{true, "legacy passthrough", {}}
+                : validator.validate(call);
+            if (!validation.success)
             {
-                writer.sendError(toolResult.value("message", "工具调用失败"));
+                trace.markValidation(false, validation.message);
+                writer.sendEvent("trace", trace.toJson().dump());
+                writer.sendError(validation.message);
+                writer.sendDone();
+                writer.close();
+                return;
+            }
+            trace.markValidation(true, "");
+            writer.sendEvent("trace", trace.toJson().dump());
+
+            agent::AgentToolResult toolResult = executor.execute(call, userId);
+            trace.markToolResult(toolResult.success, toolResult.resultJson);
+            writer.sendEvent("trace", trace.toJson().dump());
+            if (!toolResult.success)
+            {
+                writer.sendError(toolResult.resultJson.value("message", "工具调用失败"));
                 writer.sendDone();
                 writer.close();
                 return;
             }
 
-            writer.sendEvent("tool_result", json{{"toolName", toolName}, {"result", toolResult}}.dump());
+            writer.sendEvent("tool_result", json{{"toolName", call.toolName}, {"result", toolResult.resultJson}}.dump());
             writer.sendStatus("正在基于工具结果生成回答");
 
             auto quotaCheck = quotaService.checkBeforeAI(userId);
             if (!quotaCheck.allowed)
             {
+                trace.markFinalAnswer(false, quotaCheck.message);
+                writer.sendEvent("trace", trace.toJson().dump());
                 writer.sendError(quotaCheck.message);
                 writer.sendDone();
                 writer.close();
                 return;
             }
 
-            std::string prompt = service.buildToolSummaryPrompt(question, toolName, toolResult);
+            std::string prompt = service.buildToolSummaryPrompt(question, call.legacyToolName, toolResult.resultJson);
             aiCallStarted = true;
             std::string answer = streamPromptWithFallback(writer, prompt, modelType);
             if (answer.empty())
@@ -846,12 +1026,16 @@ void FitnessToolHandler::handleChatToolSendStream(const http::HttpRequest& req, 
                 quotaService.logAIUsage(userId, "/chat/fitness-tool-send-stream", modelType,
                     false, false, "AI returned empty tool summary");
                 quotaFinalized = true;
+                trace.markFinalAnswer(false, "AI 未返回可用回答");
+                writer.sendEvent("trace", trace.toJson().dump());
                 writer.sendError("AI 未返回可用回答");
             }
             else
             {
                 quotaService.consumeQuotaOnSuccess(userId, "/chat/fitness-tool-send-stream", modelType);
                 quotaFinalized = true;
+                trace.markFinalAnswer(true, "");
+                writer.sendEvent("trace", trace.toJson().dump());
             }
             writer.sendDone();
         }

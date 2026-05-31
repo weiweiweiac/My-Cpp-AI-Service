@@ -101,6 +101,14 @@ add_executable(fitness_tools_test
 
 add_test(NAME fitness_tools_test COMMAND fitness_tools_test)
 
+add_executable(agent_tool_calling_test
+    ${PROJECT_SOURCE_DIR}/tests/agent_tool_calling_test.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/tools/AgentToolCalling.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/tools/FitnessToolService.cpp
+)
+
+add_test(NAME agent_tool_calling_test COMMAND agent_tool_calling_test)
+
 add_executable(ai_quota_service_test
     ${PROJECT_SOURCE_DIR}/tests/ai_quota_service_test.cpp
 )
