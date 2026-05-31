@@ -2,9 +2,48 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cctype>
+#include <iostream>
 #include <filesystem>
 #include <fstream>
 #include <utility>
+
+namespace
+{
+
+std::string trimAscii(const std::string& value)
+{
+    auto begin = std::find_if_not(value.begin(), value.end(), [](unsigned char ch) {
+        return std::isspace(ch);
+    });
+    auto end = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char ch) {
+        return std::isspace(ch);
+    }).base();
+    if (begin >= end)
+    {
+        return "";
+    }
+    return std::string(begin, end);
+}
+
+bool validChunk(const rag::DocumentChunk& chunk)
+{
+    return !trimAscii(chunk.chunkId).empty()
+        && !trimAscii(chunk.source).empty()
+        && !trimAscii(chunk.content).empty()
+        && !chunk.embedding.empty();
+}
+
+int normalizeTopK(int topK)
+{
+    if (topK <= 0)
+    {
+        return 3;
+    }
+    return std::min(topK, 10);
+}
+
+} // namespace
 
 namespace rag
 {
@@ -14,25 +53,56 @@ JsonVectorStore::JsonVectorStore(std::string path, const EmbeddingClient& embedd
 {
 }
 
+bool JsonVectorStore::addChunk(const DocumentChunk& chunk)
+{
+    return addChunks(std::vector<DocumentChunk>{ chunk });
+}
+
 bool JsonVectorStore::addChunks(const std::vector<DocumentChunk>& chunks)
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    chunks_.insert(chunks_.end(), chunks.begin(), chunks.end());
-    return true;
+    size_t added = 0;
+    for (const auto& chunk : chunks)
+    {
+        if (!validChunk(chunk))
+        {
+            std::cerr << "[JsonVectorStore] skip invalid chunk id=" << chunk.chunkId
+                      << " source=" << chunk.source << std::endl;
+            continue;
+        }
+        chunks_.push_back(chunk);
+        ++added;
+    }
+    std::cerr << "[JsonVectorStore] current chunk count=" << chunks_.size() << std::endl;
+    return chunks.empty() || added > 0;
 }
 
 std::vector<SearchResult> JsonVectorStore::search(const std::string& query, int topK)
 {
+    auto queryEmbedding = embeddingClient_.embed(query);
+    return searchByEmbedding(queryEmbedding, topK);
+}
+
+std::vector<SearchResult> JsonVectorStore::searchByEmbedding(
+    const std::vector<float>& queryEmbedding, int topK)
+{
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<SearchResult> results;
-    if (topK <= 0 || chunks_.empty())
+    topK = normalizeTopK(topK);
+    std::cerr << "[JsonVectorStore] search chunks=" << chunks_.size()
+              << " topK=" << topK << std::endl;
+
+    if (queryEmbedding.empty() || chunks_.empty())
     {
         return results;
     }
 
-    auto queryEmbedding = embeddingClient_.embed(query);
     for (const auto& chunk : chunks_)
     {
+        if (!validChunk(chunk))
+        {
+            continue;
+        }
         double score = cosineSimilarity(queryEmbedding, chunk.embedding);
         if (score > 0.0)
         {
@@ -48,6 +118,13 @@ std::vector<SearchResult> JsonVectorStore::search(const std::string& query, int 
     {
         results.resize(static_cast<size_t>(topK));
     }
+
+    for (const auto& result : results)
+    {
+        std::cerr << "[JsonVectorStore] hit id=" << result.chunk.chunkId
+                  << " source=" << result.chunk.source
+                  << " score=" << result.score << std::endl;
+    }
     return results;
 }
 
@@ -57,7 +134,8 @@ bool JsonVectorStore::load()
     chunks_.clear();
 
     std::filesystem::path filePath(path_);
-    if (!std::filesystem::exists(filePath))
+    std::error_code ec;
+    if (!std::filesystem::exists(filePath, ec))
     {
         return true;
     }
@@ -91,8 +169,24 @@ bool JsonVectorStore::load()
 
     for (const auto& item : *rows)
     {
-        chunks_.push_back(chunkFromJson(item));
+        try
+        {
+            auto chunk = chunkFromJson(item);
+            if (validChunk(chunk))
+            {
+                chunks_.push_back(std::move(chunk));
+            }
+            else
+            {
+                std::cerr << "[JsonVectorStore] skip invalid persisted chunk" << std::endl;
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "[JsonVectorStore] skip bad persisted chunk: " << e.what() << std::endl;
+        }
     }
+    std::cerr << "[JsonVectorStore] loaded chunk count=" << chunks_.size() << std::endl;
     return true;
 }
 
@@ -100,9 +194,16 @@ bool JsonVectorStore::save()
 {
     std::lock_guard<std::mutex> lock(mutex_);
     std::filesystem::path filePath(path_);
+    std::error_code ec;
     if (filePath.has_parent_path())
     {
-        std::filesystem::create_directories(filePath.parent_path());
+        std::filesystem::create_directories(filePath.parent_path(), ec);
+        if (ec)
+        {
+            std::cerr << "[JsonVectorStore] failed to create store directory: "
+                      << ec.message() << std::endl;
+            return false;
+        }
     }
 
     json body;
@@ -119,6 +220,8 @@ bool JsonVectorStore::save()
         return false;
     }
     output << body.dump(2);
+    std::cerr << "[JsonVectorStore] saved chunk count=" << chunks_.size()
+              << " path=" << path_ << std::endl;
     return true;
 }
 

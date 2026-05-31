@@ -12,7 +12,10 @@ public:
     {
         Index,
         Search,
-        ChatRag
+        ChatRag,
+        VectorIndex,
+        VectorSearch,
+        VectorChatRag
     };
 
     FitnessRagHandler(ChatServer* server, Action action)
@@ -21,11 +24,15 @@ public:
 
     void handle(const http::HttpRequest& req, http::HttpResponse* resp) override;
     void handleChatRagStream(const http::HttpRequest& req, http::HttpStreamWriter& writer);
+    void handleVectorChatRagStream(const http::HttpRequest& req, http::HttpStreamWriter& writer);
 
 private:
     void handleIndex(const http::HttpRequest& req, http::HttpResponse* resp);
     void handleSearch(const http::HttpRequest& req, http::HttpResponse* resp);
     void handleChatRag(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleVectorIndex(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleVectorSearch(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleVectorChatRag(const http::HttpRequest& req, http::HttpResponse* resp);
     bool requireLogin(const http::HttpRequest& req, http::HttpResponse* resp, int& userId);
     void sendJson(const http::HttpRequest& req, http::HttpResponse* resp,
         http::HttpResponse::HttpStatusCode statusCode, const std::string& statusMessage,

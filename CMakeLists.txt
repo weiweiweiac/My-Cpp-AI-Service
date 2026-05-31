@@ -70,13 +70,29 @@ add_test(NAME login_session_policy_test COMMAND login_session_policy_test)
 
 add_executable(rag_core_test
     ${PROJECT_SOURCE_DIR}/tests/rag_core_test.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/EmbeddingClient.cpp
     ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/TextSplitter.cpp
     ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/HashEmbeddingClient.cpp
     ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/JsonVectorStore.cpp
     ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/FitnessRagService.cpp
 )
 
+target_link_libraries(rag_core_test ${CURL_LIBRARIES})
+
 add_test(NAME rag_core_test COMMAND rag_core_test)
+
+add_executable(rag_vector_store_test
+    ${PROJECT_SOURCE_DIR}/tests/rag_vector_store_test.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/EmbeddingClient.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/TextSplitter.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/HashEmbeddingClient.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/JsonVectorStore.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/rag/VectorRagService.cpp
+)
+
+target_link_libraries(rag_vector_store_test ${CURL_LIBRARIES})
+
+add_test(NAME rag_vector_store_test COMMAND rag_vector_store_test)
 
 add_executable(fitness_tools_test
     ${PROJECT_SOURCE_DIR}/tests/fitness_tools_test.cpp
@@ -123,6 +139,7 @@ target_link_libraries(http_server
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
     target_link_libraries(http_server stdc++fs)
     target_link_libraries(rag_core_test stdc++fs)
+    target_link_libraries(rag_vector_store_test stdc++fs)
 endif()
 
 # 如果库不在默认路径，添加链接目录

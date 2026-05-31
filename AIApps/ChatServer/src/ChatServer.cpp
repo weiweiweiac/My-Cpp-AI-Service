@@ -198,6 +198,10 @@ void ChatServer::initializeRouter() {
         std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::Index));
     httpServer_.Post("/rag/search",
         std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::Search));
+    httpServer_.Post("/rag/vector/index",
+        std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::VectorIndex));
+    httpServer_.Get("/rag/vector/search",
+        std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::VectorSearch));
     httpServer_.Post("/chat/rag-send",
         std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::ChatRag));
     auto fitnessRagStreamHandler =
@@ -205,6 +209,14 @@ void ChatServer::initializeRouter() {
     httpServer_.PostStream("/chat/rag-send-stream",
         [fitnessRagStreamHandler](const http::HttpRequest& req, http::HttpStreamWriter& writer) {
             fitnessRagStreamHandler->handleChatRagStream(req, writer);
+        });
+    httpServer_.Post("/chat/vector-rag-send",
+        std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::VectorChatRag));
+    auto vectorRagStreamHandler =
+        std::make_shared<FitnessRagHandler>(this, FitnessRagHandler::Action::VectorChatRag);
+    httpServer_.PostStream("/chat/vector-rag-send-stream",
+        [vectorRagStreamHandler](const http::HttpRequest& req, http::HttpStreamWriter& writer) {
+            vectorRagStreamHandler->handleVectorChatRagStream(req, writer);
         });
 
     httpServer_.Get("/fitness/tools/list",

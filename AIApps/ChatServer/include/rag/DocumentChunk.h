@@ -33,23 +33,51 @@ inline json chunkToJson(const DocumentChunk& chunk)
     body["title"] = chunk.title;
     body["source"] = chunk.source;
     body["content"] = chunk.content;
+    body["text"] = chunk.content;
     body["embedding"] = chunk.embedding;
     body["createdAt"] = chunk.createdAt;
     return body;
 }
 
+inline std::string jsonStringValue(const json& body, const std::string& key)
+{
+    if (!body.contains(key) || body[key].is_null())
+    {
+        return "";
+    }
+    if (body[key].is_string())
+    {
+        return body[key].get<std::string>();
+    }
+    if (body[key].is_number() || body[key].is_boolean())
+    {
+        return body[key].dump();
+    }
+    return "";
+}
+
 inline DocumentChunk chunkFromJson(const json& body)
 {
     DocumentChunk chunk;
-    chunk.chunkId = body.value("chunkId", "");
-    chunk.docId = body.value("docId", "");
-    chunk.title = body.value("title", "");
-    chunk.source = body.value("source", "");
-    chunk.content = body.value("content", "");
-    chunk.createdAt = body.value("createdAt", "");
+    chunk.chunkId = jsonStringValue(body, "chunkId");
+    chunk.docId = jsonStringValue(body, "docId");
+    chunk.title = jsonStringValue(body, "title");
+    chunk.source = jsonStringValue(body, "source");
+    chunk.content = jsonStringValue(body, "content");
+    if (chunk.content.empty())
+    {
+        chunk.content = jsonStringValue(body, "text");
+    }
+    chunk.createdAt = jsonStringValue(body, "createdAt");
     if (body.contains("embedding") && body["embedding"].is_array())
     {
-        chunk.embedding = body["embedding"].get<std::vector<float>>();
+        for (const auto& value : body["embedding"])
+        {
+            if (value.is_number())
+            {
+                chunk.embedding.push_back(value.get<float>());
+            }
+        }
     }
     return chunk;
 }

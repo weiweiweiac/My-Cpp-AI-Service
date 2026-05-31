@@ -1,14 +1,15 @@
 # My Cpp AI Service
 
-一个基于 C++17 自研 HTTP 服务框架实现的 AI 健身教练后端项目。项目围绕“用户登录、健身档案、训练计划、训练记录、AI 对话、RAG 知识库、工具调用、SSE 流式响应、用户权限与免费额度”构建完整业务闭环，重点展示 C++ 后端工程能力与 AI 应用落地能力。
+一个基于 C++17 自研 HTTP 服务框架实现的 **C++ 高并发 AI Agent 应用服务平台**。项目以健身场景为业务载体，围绕用户体系、AI 对话、SSE 流式响应、RAG 知识库、真实 Embedding 向量检索、Agent 工具调用、AI 额度控制和可部署验证构建后端闭环，重点展示 C++ 后端工程能力与大模型应用落地能力。
 
 ## 项目亮点
 
 - 自研 C++ HTTP Server：封装路由、Handler、Session、Middleware、SSE 流式响应等基础能力
 - C++17 后端业务服务：不依赖 Spring / FastAPI 等成熟 Web 框架，完整实现请求分发和业务处理
-- AI 健身教练业务闭环：用户档案、训练日历、训练记录、AI 计划生成、知识库问答、工具调用
+- 面向健身场景的 AI Agent 后端：用户档案、训练日历、训练记录、AI 计划生成、知识库问答、工具调用
 - SSE 流式输出：支持普通聊天、RAG 问答、训练计划生成、工具调用总结的流式响应
-- 本地轻量 RAG：文本切分、Hash Embedding、JSON VectorStore、TopK 检索、Prompt 增强回答
+- Vector RAG 检索模块：EmbeddingClient、固定长度 chunk + overlap、C++ 内存向量索引、JSON 持久化、TopK cosine 检索、Prompt 增强回答
+- 真实 Embedding 配置：支持 `EMBEDDING_API_KEY`、`EMBEDDING_BASE_URL`、`EMBEDDING_MODEL`，无 Key 环境自动回退 deterministic mock embedding
 - 健身工具调用：BMI、BMR、TDEE、训练容量、训练记录查询等工具，支持 AI 二次总结
 - 用户权限与 AI 免费额度：支持 user/admin 角色、普通用户免费次数、AI 使用日志
 - MySQL 持久化：用户、聊天记录、健身档案、训练计划、训练记录、AI 使用记录落库
@@ -58,13 +59,17 @@
 - 支持保存训练动作、重量、次数、组数、RPE、RIR、休息时间、完成状态和训练感受
 - 支持训练状态更新和最近训练记录查询
 
-### 5. 本地轻量 RAG
+### 5. RAG 知识库与向量检索
 
 - 支持导入健身知识文本
-- 文本切分并保存到本地 JSON VectorStore
-- 使用轻量 Hash Embedding 做本地检索
+- 旧版 `/rag/index`、`/rag/search` 保留 Hash Embedding + JSON VectorStore，保证兼容
+- 新版 `/rag/vector/index`、`/rag/vector/search` 使用 EmbeddingClient 生成 float embedding
+- 文档按固定长度 chunk + overlap 切分，每个 chunk 保留 source、text、embedding、createdAt
+- 当前 VectorStore 使用 C++ 内存向量索引 + JSON 持久化，默认路径为 `data/rag/vector_store.json`
+- 检索使用 cosine similarity，按 TopK 返回 source、text、score
 - `/rag/search` 只做本地检索，不消耗 AI 额度
 - `/chat/rag-send` 和 `/chat/rag-send-stream` 会基于检索结果调用 AI 生成回答
+- `/chat/vector-rag-send` 和 `/chat/vector-rag-send-stream` 会基于 vector RAG 检索结果调用 AI 生成回答
 
 ### 6. 健身工具调用
 
@@ -95,6 +100,8 @@
 - `POST /fitness/calendar/generate-plan-stream`
 - `POST /chat/rag-send`
 - `POST /chat/rag-send-stream`
+- `POST /chat/vector-rag-send`
+- `POST /chat/vector-rag-send-stream`
 - `POST /chat/fitness-tool-send`
 - `POST /chat/fitness-tool-send-stream`
 
@@ -112,6 +119,8 @@
 - `/fitness/calendar/status/update`
 - `/rag/index`
 - `/rag/search`
+- `/rag/vector/index`
+- `/rag/vector/search`
 - `/fitness/tools/list`
 - `/fitness/tool/call`
 
@@ -135,3 +144,78 @@
 ├── docs/sql                     # 数据库迁移 SQL
 └── tests                        # 轻量单元测试
 ```
+
+## Vector RAG 架构
+
+```text
+用户问题
+  -> EmbeddingClient 生成 query embedding
+  -> JsonVectorStore / VectorStore 执行 TopK cosine 检索
+  -> VectorRagService 拼接 RAG Prompt
+  -> 复用现有 AIHelper / AIStrategy 调用大模型
+  -> JSON 或 SSE 返回 answer + contexts
+```
+
+当前采用 C++ 内存向量索引 + JSON 持久化，适合简历项目和小规模知识库验证。后续可以替换为 FAISS、Milvus、Chroma、pgvector 等正式向量数据库。
+
+### Embedding 配置
+
+生产或投递展示建议配置真实 embedding API：
+
+```bash
+export EMBEDDING_API_KEY="your-api-key"
+export EMBEDDING_BASE_URL="https://your-openai-compatible-host/v1/embeddings"
+export EMBEDDING_MODEL="your-embedding-model"
+```
+
+如果未配置上述变量，`EmbeddingClient` 会使用 256 维 deterministic mock embedding，便于本地编译和无 Key 环境测试。mock embedding 不是生产效果，只用于验证索引、持久化、TopK 检索和接口链路。
+
+### curl 示例
+
+索引文档：
+
+```bash
+curl --http1.1 -i -X POST http://127.0.0.1:8080/rag/vector/index \
+  -H "Content-Type: application/json" \
+  -d '{"source":"bench_press.md","text":"杠铃卧推是一种经典胸部训练动作，主要刺激胸大肌，同时需要肩胛稳定，动作过程中应保持肩胛后缩下沉，避免肩关节过度前移。"}'
+```
+
+检索文档：
+
+```bash
+curl --http1.1 -i "http://127.0.0.1:8080/rag/vector/search?query=卧推怎么保护肩膀&topK=3"
+```
+
+Vector RAG 非流式问答：
+
+```bash
+curl --http1.1 -i -X POST http://127.0.0.1:8080/chat/vector-rag-send \
+  -H "Content-Type: application/json" \
+  -H "Cookie: sessionId=xxx" \
+  -d '{"message":"卧推怎么保护肩膀？","topK":3}'
+```
+
+Vector RAG SSE 流式问答：
+
+```bash
+curl --http1.1 -i -X POST http://127.0.0.1:8080/chat/vector-rag-send-stream \
+  -H "Content-Type: application/json" \
+  -H "Cookie: sessionId=xxx" \
+  -d '{"message":"卧推怎么保护肩膀？","topK":3}'
+```
+
+## 面试讲解点
+
+- 为什么从 Hash Embedding 升级到真实 Embedding：Hash 适合本地演示，真实 embedding 更能表达语义相似度，便于扩展到通用知识库。
+- chunk_size 和 overlap 怎么选：当前默认 500/80，控制上下文完整性和召回冗余，后续可按 Markdown 标题、段落或语义切分。
+- cosine similarity 怎么计算：对 query embedding 和 chunk embedding 计算点积，再除以两个向量范数。
+- TopK 检索结果如何拼进 Prompt：每条上下文带 `source` 和 `score`，要求模型优先基于资料回答，资料不足时明确说明。
+- 如何防止 RAG 幻觉：Prompt 中约束“资料不足就说明不足”，并将来源和分数显式暴露给模型和接口调用方。
+- 当前轻量 VectorStore 和 FAISS/Milvus/Chroma 的区别：本项目是 C++ 自研轻量检索模块，适合小规模验证，不是生产级向量数据库。
+- SSE 流式 RAG 怎么做：先完成检索并发送 retrieved 事件，再构造 Prompt，最后复用现有流式模型调用逐块输出。
+
+## 后续 Roadmap
+
+- 将轻量 JSON VectorStore 替换为 FAISS、Milvus、Chroma 或 pgvector。
+- 增加 RAG 评测与可观测性，包括检索耗时、TopK 命中 source、AI 调用耗时。
+- 将健身工具调用继续升级为更标准的 Agent Tool Calling 链路。

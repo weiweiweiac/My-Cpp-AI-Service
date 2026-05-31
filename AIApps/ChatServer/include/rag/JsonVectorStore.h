@@ -15,7 +15,10 @@ class JsonVectorStore : public VectorStore
 public:
     JsonVectorStore(std::string path, const EmbeddingClient& embeddingClient);
 
+    bool addChunk(const DocumentChunk& chunk) override;
     bool addChunks(const std::vector<DocumentChunk>& chunks) override;
+    std::vector<SearchResult> searchByEmbedding(
+        const std::vector<float>& queryEmbedding, int topK) override;
     std::vector<SearchResult> search(const std::string& query, int topK) override;
     bool load() override;
     bool save() override;
@@ -24,9 +27,9 @@ public:
 
     const std::string& path() const { return path_; }
 
-private:
     static double cosineSimilarity(const std::vector<float>& a, const std::vector<float>& b);
 
+private:
     std::string path_;
     const EmbeddingClient& embeddingClient_;
     std::vector<DocumentChunk> chunks_;
