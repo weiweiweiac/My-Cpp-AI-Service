@@ -1,5 +1,6 @@
 #include "../include/handlers/ChatLoginHandler.h"
 #include "../include/auth/LoginSessionPolicy.h"
+#include "../include/auth/PasswordHasher.h"
 
 void ChatLoginHandler::handle(const http::HttpRequest& req, http::HttpResponse* resp)
 {
@@ -7,7 +8,6 @@ void ChatLoginHandler::handle(const http::HttpRequest& req, http::HttpResponse* 
     auto contentType = req.getHeader("Content-Type");
     if (contentType.empty() || contentType != "application/json" || req.getBody().empty())
     {
-        LOG_INFO << "content" << req.getBody();
         resp->setStatusLine(req.getVersion(), http::HttpResponse::k400BadRequest, "Bad Request");
         resp->setCloseConnection(true);
         resp->setContentType("application/json");
@@ -23,7 +23,7 @@ void ChatLoginHandler::handle(const http::HttpRequest& req, http::HttpResponse* 
         std::string username = parsed["username"];
         std::string password = parsed["password"];
 
-        int userId = queryUserId(username, password);
+        int userId = queryUserIdByPassword(username, password);
         if (userId != -1)
         {
             auto session = server_->getSessionManager()->getSession(req, resp);
@@ -90,16 +90,21 @@ void ChatLoginHandler::handle(const http::HttpRequest& req, http::HttpResponse* 
 
 }
 
-int ChatLoginHandler::queryUserId(const std::string& username, const std::string& password)
+int ChatLoginHandler::queryUserIdByPassword(const std::string& username, const std::string& password)
 {
 
-    std::string sql = "SELECT id FROM users WHERE username = ? AND password = ?";
-    // std::vector<std::string> params = {username, password};
-    auto res = mysqlUtil_.executeQuery(sql, username, password);
+    std::string sql = "SELECT id, password_hash, password_salt FROM users WHERE username = ? LIMIT 1";
+    auto res = mysqlUtil_.executeQuery(sql, username);
     if (res->next())
     {
-        int id = res->getInt("id");
-        return id;
+        const std::string passwordHash =
+            res->isNull("password_hash") ? "" : res->getString("password_hash");
+        const std::string passwordSalt =
+            res->isNull("password_salt") ? "" : res->getString("password_salt");
+        if (auth::PasswordHasher::verifyPassword(password, passwordSalt, passwordHash))
+        {
+            return res->getInt("id");
+        }
     }
 
     return -1;

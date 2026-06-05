@@ -13,7 +13,7 @@ public:
     void handle(const http::HttpRequest& req, http::HttpResponse* resp) override;
 
 private:
-    int queryUserId(const std::string& username, const std::string& password);
+    int queryUserIdByPassword(const std::string& username, const std::string& password);
 
 private:
     ChatServer* server_;

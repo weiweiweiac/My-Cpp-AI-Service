@@ -45,6 +45,11 @@ std::string Session::getValue(const std::string& key) const
     return it != data_.end() ? it->second : std::string();
 }
 
+void Session::replaceValues(const std::unordered_map<std::string, std::string>& values)
+{
+    data_ = values;
+}
+
 // 删除会话数据
 void Session::remove(const std::string& key)
 {

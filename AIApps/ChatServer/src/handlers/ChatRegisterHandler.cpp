@@ -1,4 +1,5 @@
 #include "../include/handlers/ChatRegisterHandler.h"
+#include "../include/auth/PasswordHasher.h"
 
 
 void ChatRegisterHandler::handle(const http::HttpRequest& req, http::HttpResponse* resp)
@@ -46,11 +47,15 @@ int ChatRegisterHandler::insertUser(const std::string& username, const std::stri
 
     if (!isUserExist(username))
     {
+        const std::string salt = auth::PasswordHasher::generateSalt();
+        const std::string passwordHash = auth::PasswordHasher::hashPassword(password, salt);
 
-        std::string sql = "INSERT INTO users (username, password) VALUES ('" + username + "', '" + password + "')";
-        mysqlUtil_.executeUpdate(sql);
-        std::string sql2 = "SELECT id FROM users WHERE username = '" + username + "'";
-        auto res = mysqlUtil_.executeQuery(sql2);
+        std::string sql =
+            "INSERT INTO users (username, password, password_hash, password_salt) "
+            "VALUES (?, '', ?, ?)";
+        mysqlUtil_.executeUpdate(sql, username, passwordHash, salt);
+        std::string sql2 = "SELECT id FROM users WHERE username = ? LIMIT 1";
+        auto res = mysqlUtil_.executeQuery(sql2, username);
         if (res->next())
         {
             return res->getInt("id");
@@ -61,8 +66,8 @@ int ChatRegisterHandler::insertUser(const std::string& username, const std::stri
 
 bool ChatRegisterHandler::isUserExist(const std::string& username)
 {
-    std::string sql = "SELECT id FROM users WHERE username = '" + username + "'";
-    auto res = mysqlUtil_.executeQuery(sql);
+    std::string sql = "SELECT id FROM users WHERE username = ? LIMIT 1";
+    auto res = mysqlUtil_.executeQuery(sql, username);
     if (res->next())
     {
         return true;

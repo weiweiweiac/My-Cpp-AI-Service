@@ -14,6 +14,7 @@
 
 #include "../../../HttpServer/include/http/HttpServer.h"
 #include "../../../HttpServer/include/utils/MysqlUtil.h"
+#include "../../../HttpServer/include/utils/redis/RedisClient.h"
 #include "../../../HttpServer/include/utils/FileUtil.h"
 #include "../../../HttpServer/include/utils/JsonUtil.h"
 #include"AIUtil/AISpeechProcessor.h"
@@ -121,6 +122,8 @@ private:
 
 	std::unordered_map<int,std::vector<std::string> > sessionsIdsMap;
 	std::mutex mutexForSessionsId;
+
+	std::shared_ptr<http::redis::RedisClient> redisClient_;
 
 };
 

@@ -34,6 +34,11 @@ find_library(ONNXRUNTIME_LIBRARY
     PATHS /usr/lib /usr/lib64 /usr/local/lib
 )
 
+find_library(HIREDIS_LIBRARY
+    NAMES hiredis
+    PATHS /usr/lib /usr/lib64 /usr/local/lib
+)
+
 # 添加源文件
 file(GLOB_RECURSE HTTP_SERVER_SRC
     "${PROJECT_SOURCE_DIR}/HttpServer/src/*.cpp"
@@ -115,6 +120,32 @@ add_executable(ai_quota_service_test
 
 add_test(NAME ai_quota_service_test COMMAND ai_quota_service_test)
 
+add_executable(password_hasher_test
+    ${PROJECT_SOURCE_DIR}/tests/password_hasher_test.cpp
+    ${PROJECT_SOURCE_DIR}/AIApps/ChatServer/src/auth/PasswordHasher.cpp
+)
+
+target_link_libraries(password_hasher_test ssl crypto)
+
+add_test(NAME password_hasher_test COMMAND password_hasher_test)
+
+add_executable(redis_session_storage_test
+    ${PROJECT_SOURCE_DIR}/tests/redis_session_storage_test.cpp
+    ${PROJECT_SOURCE_DIR}/HttpServer/src/session/RedisSessionStorage.cpp
+    ${PROJECT_SOURCE_DIR}/HttpServer/src/session/Session.cpp
+)
+
+add_test(NAME redis_session_storage_test COMMAND redis_session_storage_test)
+
+add_executable(rate_limit_middleware_test
+    ${PROJECT_SOURCE_DIR}/tests/rate_limit_middleware_test.cpp
+    ${PROJECT_SOURCE_DIR}/HttpServer/src/middleware/ratelimit/RateLimitMiddleware.cpp
+    ${PROJECT_SOURCE_DIR}/HttpServer/src/http/HttpRequest.cpp
+    ${PROJECT_SOURCE_DIR}/HttpServer/src/http/HttpResponse.cpp
+)
+
+add_test(NAME rate_limit_middleware_test COMMAND rate_limit_middleware_test)
+
 add_executable(exercise_library_policy_test
     ${PROJECT_SOURCE_DIR}/tests/exercise_library_policy_test.cpp
 )
@@ -142,6 +173,7 @@ target_link_libraries(http_server
 
     SimpleAmqpClient
     rabbitmq
+    ${HIREDIS_LIBRARY}
 )
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
@@ -161,6 +193,7 @@ foreach(dir ${dirs})
 endforeach()
 
 message(STATUS "ONNX Runtime library: ${ONNXRUNTIME_LIBRARY}")
+message(STATUS "hiredis library: ${HIREDIS_LIBRARY}")
 message(STATUS "Main source file: ${MAIN_SRC}")
 message(STATUS "HTTP Server sources: ${HTTP_SERVER_SRC}")
 message(STATUS "Gomoku Server sources: ${GOMOKU_SERVER_SRC}")

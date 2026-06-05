@@ -25,14 +25,43 @@
 #include "../../../HttpServer/include/http/HttpRequest.h"
 #include "../../../HttpServer/include/http/HttpResponse.h"
 #include "../../../HttpServer/include/http/HttpServer.h"
+#include "../../../HttpServer/include/middleware/ratelimit/RateLimitMiddleware.h"
+#include "../../../HttpServer/include/session/RedisSessionStorage.h"
 
 #include <chrono>
+#include <cstdlib>
 #include <thread>
 #include <vector>
 
 
 
 using namespace http;
+
+namespace
+{
+
+std::string envOrDefault(const char* name, const std::string& fallback)
+{
+    const char* value = std::getenv(name);
+    if (value == nullptr || std::string(value).empty())
+    {
+        return fallback;
+    }
+    return value;
+}
+
+bool isRedisSessionEnabled()
+{
+    std::string mode = envOrDefault("SESSION_STORAGE", "");
+    if (mode == "redis" || mode == "Redis" || mode == "REDIS")
+    {
+        return true;
+    }
+    std::string enabled = envOrDefault("REDIS_SESSION_ENABLED", "");
+    return enabled == "1" || enabled == "true" || enabled == "TRUE";
+}
+
+} // namespace
 
 
 ChatServer::ChatServer(int port,
@@ -45,7 +74,12 @@ ChatServer::ChatServer(int port,
 
 void ChatServer::initialize() {
     std::cout << "ChatServer initialize start  ! " << std::endl;
-	http::MysqlUtil::init("tcp://127.0.0.1:3306", "root", "123456", "ChatHttpServer", 5);
+    const std::string mysqlHost = envOrDefault("MYSQL_HOST", "127.0.0.1");
+    const std::string mysqlPort = envOrDefault("MYSQL_PORT", "3306");
+    const std::string mysqlUser = envOrDefault("MYSQL_USER", "root");
+    const std::string mysqlPassword = envOrDefault("MYSQL_PASSWORD", "123456");
+    const std::string mysqlDatabase = envOrDefault("MYSQL_DATABASE", "ChatHttpServer");
+	http::MysqlUtil::init("tcp://" + mysqlHost + ":" + mysqlPort, mysqlUser, mysqlPassword, mysqlDatabase, 5);
 
     initializeSession();
 
@@ -272,7 +306,24 @@ void ChatServer::initializeRouter() {
 
 void ChatServer::initializeSession() {
 
-    auto sessionStorage = std::make_unique<http::session::MemorySessionStorage>();
+    std::unique_ptr<http::session::SessionStorage> sessionStorage;
+    if (isRedisSessionEnabled())
+    {
+        redisClient_ = http::redis::makeRedisClientFromEnv();
+        if (redisClient_ && redisClient_->isConnected())
+        {
+            sessionStorage = std::make_unique<http::session::RedisSessionStorage>(redisClient_);
+        }
+        else
+        {
+            LOG_WARN << "Redis session requested but Redis is unavailable; using memory session storage";
+        }
+    }
+
+    if (!sessionStorage)
+    {
+        sessionStorage = std::make_unique<http::session::MemorySessionStorage>();
+    }
 
     auto sessionManager = std::make_unique<http::session::SessionManager>(std::move(sessionStorage));
 
@@ -284,6 +335,21 @@ void ChatServer::initializeMiddleware() {
     auto corsMiddleware = std::make_shared<http::middleware::CorsMiddleware>();
 
     httpServer_.addMiddleware(corsMiddleware);
+
+    if (!redisClient_)
+    {
+        redisClient_ = http::redis::makeRedisClientFromEnv();
+    }
+    if (redisClient_ && redisClient_->isConnected())
+    {
+        auto rateLimitMiddleware =
+            std::make_shared<http::middleware::RateLimitMiddleware>(redisClient_);
+        httpServer_.addMiddleware(rateLimitMiddleware);
+    }
+    else
+    {
+        LOG_WARN << "Redis unavailable; rate limiting middleware disabled";
+    }
 }
 
 

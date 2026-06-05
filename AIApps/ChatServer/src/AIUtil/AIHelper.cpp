@@ -184,8 +184,6 @@ json AIHelper::executeCurl(const json& payload) {
         throw std::runtime_error("Failed to initialize curl");
     }
 
-    std::cout<<"test "<< strategy->getApiUrl().c_str()<<' '<< strategy->getApiKey()<<std::endl;
-
     std::string readBuffer;
     struct curl_slist* headers = nullptr;
     std::string authHeader = "Authorization: Bearer " + strategy->getApiKey();
@@ -319,45 +317,16 @@ size_t AIHelper::StreamWriteCallback(void* contents, size_t size, size_t nmemb, 
     return totalSize;
 }
 
-std::string AIHelper::escapeString(const std::string& input) {
-    std::string output;
-    output.reserve(input.size() * 2);
-    for (char c : input) {
-        switch (c) {
-            case '\\': output += "\\\\"; break;
-            case '\'': output += "\\\'"; break;
-            case '\"': output += "\\\""; break;
-            case '\n': output += "\\n"; break;
-            case '\r': output += "\\r"; break;
-            case '\t': output += "\\t"; break;
-            default:   output += c; break;
-        }
-    }
-    return output;
-}
-
-
 void AIHelper::pushMessageToMysql(int userId, const std::string& userName, bool is_user, const std::string& userInput,long long ms, std::string sessionId) {
-    // std::string sql = "INSERT INTO chat_message (id, username, is_user, content, ts) VALUES ("
-    //     + std::to_string(userId) + ", "  // 这里用 userId 作为 id，或者你自己生成
-    //     + "'" + userName + "', "
-    //     + std::to_string(is_user ? 1 : 0) + ", "
-    //     + "'" + userInput + "', "
-    //     + std::to_string(ms) + ")";
-    std::string safeUserName = escapeString(userName);
-    std::string safeUserInput = escapeString(userInput);
+    json message;
+    message["type"] = "insert_chat_message";
+    message["userId"] = userId;
+    message["username"] = userName;
+    message["sessionId"] = sessionId;
+    message["isUser"] = is_user;
+    message["content"] = userInput;
+    message["ts"] = ms;
 
-    std::string sql = "INSERT INTO chat_message (id, username, session_id, is_user, content, ts) VALUES ("
-        + std::to_string(userId) + ", "
-        + "'" + safeUserName + "', "
-        + sessionId + ", "
-        + std::to_string(is_user ? 1 : 0) + ", "
-        + "'" + safeUserInput + "', "
-        + std::to_string(ms) + ")";
-
-    //改成消息队列异步执行mysql操作，用于流量削峰与解耦逻辑
-    //mysqlUtil_.executeUpdate(sql);
-
-    MQManager::instance().publish("sql_queue", sql);
+    MQManager::instance().publish("sql_queue", message.dump());
 }
 

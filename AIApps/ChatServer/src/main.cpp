@@ -7,6 +7,7 @@
 #include <muduo/net/EventLoop.h>
 
 #include"../include/ChatServer.h"
+#include "../../../HttpServer/include/utils/JsonUtil.h"
 
 const std::string RABBITMQ_HOST = "localhost";
 const std::string QUEUE_NAME = "sql_queue";
@@ -14,7 +15,29 @@ const int THREAD_NUM = 2;
 
 void executeMysql(const std::string sql) {
     http::MysqlUtil mysqlUtil_;
-    mysqlUtil_.executeUpdate(sql);
+    try
+    {
+        json message = json::parse(sql);
+        if (message.value("type", "") == "insert_chat_message")
+        {
+            std::string insertSql =
+                "INSERT INTO chat_message (id, username, session_id, is_user, content, ts) "
+                "VALUES (?, ?, ?, ?, ?, ?)";
+            mysqlUtil_.executeUpdate(insertSql,
+                message.value("userId", 0),
+                message.value("username", ""),
+                message.value("sessionId", ""),
+                message.value("isUser", false) ? 1 : 0,
+                message.value("content", ""),
+                message.value("ts", 0LL));
+            return;
+        }
+    }
+    catch (const std::exception&)
+    {
+    }
+
+    LOG_WARN << "Discarded unsupported SQL queue message";
 }
 
 
