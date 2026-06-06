@@ -34,11 +34,6 @@ find_library(ONNXRUNTIME_LIBRARY
     PATHS /usr/lib /usr/lib64 /usr/local/lib
 )
 
-find_library(HIREDIS_LIBRARY
-    NAMES hiredis
-    PATHS /usr/lib /usr/lib64 /usr/local/lib
-)
-
 # 添加源文件
 file(GLOB_RECURSE HTTP_SERVER_SRC
     "${PROJECT_SOURCE_DIR}/HttpServer/src/*.cpp"
@@ -173,7 +168,6 @@ target_link_libraries(http_server
 
     SimpleAmqpClient
     rabbitmq
-    ${HIREDIS_LIBRARY}
 )
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
@@ -193,7 +187,6 @@ foreach(dir ${dirs})
 endforeach()
 
 message(STATUS "ONNX Runtime library: ${ONNXRUNTIME_LIBRARY}")
-message(STATUS "hiredis library: ${HIREDIS_LIBRARY}")
 message(STATUS "Main source file: ${MAIN_SRC}")
 message(STATUS "HTTP Server sources: ${HTTP_SERVER_SRC}")
 message(STATUS "Gomoku Server sources: ${GOMOKU_SERVER_SRC}")

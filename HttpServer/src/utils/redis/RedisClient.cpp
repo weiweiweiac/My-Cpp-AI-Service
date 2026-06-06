@@ -1,12 +1,19 @@
 #include "../../../include/utils/redis/RedisClient.h"
 
-#include <hiredis/hiredis.h>
 #include <muduo/base/Logging.h>
 
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstring>
 #include <cstdlib>
-#include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace http
 {
@@ -26,18 +33,130 @@ std::string envOrDefault(const char* name, const std::string& fallback)
     return value;
 }
 
-struct ReplyDeleter
+struct RedisReply
 {
-    void operator()(redisReply* reply) const
-    {
-        if (reply)
-        {
-            freeReplyObject(reply);
-        }
-    }
+    char type { '\0' };
+    bool nil { false };
+    long long integer { 0 };
+    std::string text;
 };
 
-using ReplyPtr = std::unique_ptr<redisReply, ReplyDeleter>;
+bool sendAll(int fd, const std::string& data)
+{
+    size_t sent = 0;
+    while (sent < data.size())
+    {
+        ssize_t n = ::send(fd, data.data() + sent, data.size() - sent, 0);
+        if (n <= 0)
+        {
+            return false;
+        }
+        sent += static_cast<size_t>(n);
+    }
+    return true;
+}
+
+bool readByte(int fd, char& ch)
+{
+    ssize_t n = ::recv(fd, &ch, 1, 0);
+    return n == 1;
+}
+
+bool readLine(int fd, std::string& line)
+{
+    line.clear();
+    char ch = '\0';
+    while (readByte(fd, ch))
+    {
+        if (ch == '\r')
+        {
+            char next = '\0';
+            if (!readByte(fd, next) || next != '\n')
+            {
+                return false;
+            }
+            return true;
+        }
+        line.push_back(ch);
+    }
+    return false;
+}
+
+bool readExact(int fd, size_t length, std::string& output)
+{
+    output.clear();
+    output.resize(length);
+    size_t received = 0;
+    while (received < length)
+    {
+        ssize_t n = ::recv(fd, &output[received], length - received, 0);
+        if (n <= 0)
+        {
+            return false;
+        }
+        received += static_cast<size_t>(n);
+    }
+
+    char cr = '\0';
+    char lf = '\0';
+    return readByte(fd, cr) && readByte(fd, lf) && cr == '\r' && lf == '\n';
+}
+
+std::string encodeCommand(const std::vector<std::string>& args)
+{
+    std::ostringstream oss;
+    oss << "*" << args.size() << "\r\n";
+    for (const auto& arg : args)
+    {
+        oss << "$" << arg.size() << "\r\n";
+        oss << arg << "\r\n";
+    }
+    return oss.str();
+}
+
+bool readReply(int fd, RedisReply& reply)
+{
+    reply = RedisReply {};
+    if (!readByte(fd, reply.type))
+    {
+        return false;
+    }
+
+    std::string line;
+    switch (reply.type)
+    {
+    case '+':
+    case '-':
+        if (!readLine(fd, reply.text))
+        {
+            return false;
+        }
+        return reply.type != '-';
+    case ':':
+        if (!readLine(fd, line))
+        {
+            return false;
+        }
+        reply.integer = std::stoll(line);
+        return true;
+    case '$':
+        if (!readLine(fd, line))
+        {
+            return false;
+        }
+        {
+            long long length = std::stoll(line);
+            if (length < 0)
+            {
+                reply.nil = true;
+                return true;
+            }
+            return readExact(fd, static_cast<size_t>(length), reply.text);
+        }
+    default:
+        return false;
+    }
+}
 
 } // namespace
 
@@ -56,36 +175,60 @@ RedisClient::RedisClient(const std::string& host, int port, const std::string& p
 
 RedisClient::~RedisClient()
 {
-    if (context_)
+    if (socketFd_ >= 0)
     {
-        redisFree(context_);
-        context_ = nullptr;
+        ::close(socketFd_);
+        socketFd_ = -1;
     }
 }
 
 void RedisClient::connect(const std::string& host, int port, const std::string& password)
 {
-    context_ = redisConnect(host.c_str(), port);
-    if (context_ == nullptr || context_->err)
+    addrinfo hints {};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    addrinfo* result = nullptr;
+    const std::string portText = std::to_string(port);
+    int rc = ::getaddrinfo(host.c_str(), portText.c_str(), &hints, &result);
+    if (rc != 0)
     {
-        LOG_ERROR << "Redis connection failed";
-        if (context_)
+        LOG_ERROR << "Redis address resolution failed";
+        return;
+    }
+
+    for (addrinfo* current = result; current != nullptr; current = current->ai_next)
+    {
+        int fd = ::socket(current->ai_family, current->ai_socktype, current->ai_protocol);
+        if (fd < 0)
         {
-            redisFree(context_);
-            context_ = nullptr;
+            continue;
         }
+
+        if (::connect(fd, current->ai_addr, current->ai_addrlen) == 0)
+        {
+            socketFd_ = fd;
+            break;
+        }
+
+        ::close(fd);
+    }
+    ::freeaddrinfo(result);
+
+    if (socketFd_ < 0)
+    {
+        LOG_ERROR << "Redis connection failed: " << std::strerror(errno);
         return;
     }
 
     if (!password.empty())
     {
-        ReplyPtr reply(static_cast<redisReply*>(
-            redisCommand(context_, "AUTH %s", password.c_str())));
-        if (!reply || reply->type == REDIS_REPLY_ERROR)
+        RedisReply reply;
+        if (!sendAll(socketFd_, encodeCommand({"AUTH", password})) || !readReply(socketFd_, reply))
         {
             LOG_ERROR << "Redis AUTH failed";
-            redisFree(context_);
-            context_ = nullptr;
+            ::close(socketFd_);
+            socketFd_ = -1;
             return;
         }
     }
@@ -95,7 +238,7 @@ void RedisClient::connect(const std::string& host, int port, const std::string& 
 
 bool RedisClient::isConnected() const
 {
-    return context_ != nullptr && context_->err == 0;
+    return socketFd_ >= 0;
 }
 
 std::optional<std::string> RedisClient::get(const std::string& key)
@@ -105,17 +248,20 @@ std::optional<std::string> RedisClient::get(const std::string& key)
         return std::nullopt;
     }
 
-    ReplyPtr reply(static_cast<redisReply*>(
-        redisCommand(context_, "GET %s", key.c_str())));
-    if (!reply || reply->type == REDIS_REPLY_NIL)
+    RedisReply reply;
+    if (!sendAll(socketFd_, encodeCommand({"GET", key})) || !readReply(socketFd_, reply))
     {
         return std::nullopt;
     }
-    if (reply->type != REDIS_REPLY_STRING)
+    if (reply.nil)
     {
         return std::nullopt;
     }
-    return std::string(reply->str, reply->len);
+    if (reply.type != '$')
+    {
+        return std::nullopt;
+    }
+    return reply.text;
 }
 
 bool RedisClient::set(const std::string& key, const std::string& value)
@@ -124,9 +270,10 @@ bool RedisClient::set(const std::string& key, const std::string& value)
     {
         return false;
     }
-    ReplyPtr reply(static_cast<redisReply*>(
-        redisCommand(context_, "SET %s %b", key.c_str(), value.data(), value.size())));
-    return reply && reply->type != REDIS_REPLY_ERROR;
+    RedisReply reply;
+    return sendAll(socketFd_, encodeCommand({"SET", key, value})) &&
+           readReply(socketFd_, reply) &&
+           reply.type == '+';
 }
 
 bool RedisClient::setex(const std::string& key, int seconds, const std::string& value)
@@ -135,9 +282,10 @@ bool RedisClient::setex(const std::string& key, int seconds, const std::string& 
     {
         return false;
     }
-    ReplyPtr reply(static_cast<redisReply*>(
-        redisCommand(context_, "SETEX %s %d %b", key.c_str(), seconds, value.data(), value.size())));
-    return reply && reply->type != REDIS_REPLY_ERROR;
+    RedisReply reply;
+    return sendAll(socketFd_, encodeCommand({"SETEX", key, std::to_string(seconds), value})) &&
+           readReply(socketFd_, reply) &&
+           reply.type == '+';
 }
 
 bool RedisClient::del(const std::string& key)
@@ -146,9 +294,10 @@ bool RedisClient::del(const std::string& key)
     {
         return false;
     }
-    ReplyPtr reply(static_cast<redisReply*>(
-        redisCommand(context_, "DEL %s", key.c_str())));
-    return reply && reply->type != REDIS_REPLY_ERROR;
+    RedisReply reply;
+    return sendAll(socketFd_, encodeCommand({"DEL", key})) &&
+           readReply(socketFd_, reply) &&
+           reply.type == ':';
 }
 
 long long RedisClient::incr(const std::string& key)
@@ -157,13 +306,14 @@ long long RedisClient::incr(const std::string& key)
     {
         return -1;
     }
-    ReplyPtr reply(static_cast<redisReply*>(
-        redisCommand(context_, "INCR %s", key.c_str())));
-    if (!reply || reply->type != REDIS_REPLY_INTEGER)
+    RedisReply reply;
+    if (!sendAll(socketFd_, encodeCommand({"INCR", key})) ||
+        !readReply(socketFd_, reply) ||
+        reply.type != ':')
     {
         return -1;
     }
-    return reply->integer;
+    return reply.integer;
 }
 
 bool RedisClient::expire(const std::string& key, int seconds)
@@ -172,9 +322,10 @@ bool RedisClient::expire(const std::string& key, int seconds)
     {
         return false;
     }
-    ReplyPtr reply(static_cast<redisReply*>(
-        redisCommand(context_, "EXPIRE %s %d", key.c_str(), seconds)));
-    return reply && reply->type != REDIS_REPLY_ERROR;
+    RedisReply reply;
+    return sendAll(socketFd_, encodeCommand({"EXPIRE", key, std::to_string(seconds)})) &&
+           readReply(socketFd_, reply) &&
+           reply.type == ':';
 }
 
 std::shared_ptr<RedisClient> makeRedisClientFromEnv()

@@ -4,8 +4,6 @@
 #include <optional>
 #include <string>
 
-struct redisContext;
-
 namespace http
 {
 namespace redis
@@ -46,7 +44,7 @@ public:
 private:
     void connect(const std::string& host, int port, const std::string& password);
 
-    redisContext* context_ { nullptr };
+    int socketFd_ { -1 };
 };
 
 std::shared_ptr<RedisClient> makeRedisClientFromEnv();
