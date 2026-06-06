@@ -130,6 +130,8 @@ add_executable(redis_session_storage_test
     ${PROJECT_SOURCE_DIR}/HttpServer/src/session/Session.cpp
 )
 
+target_link_libraries(redis_session_storage_test muduo_base)
+
 add_test(NAME redis_session_storage_test COMMAND redis_session_storage_test)
 
 add_executable(rate_limit_middleware_test
@@ -138,6 +140,8 @@ add_executable(rate_limit_middleware_test
     ${PROJECT_SOURCE_DIR}/HttpServer/src/http/HttpRequest.cpp
     ${PROJECT_SOURCE_DIR}/HttpServer/src/http/HttpResponse.cpp
 )
+
+target_link_libraries(rate_limit_middleware_test muduo_base)
 
 add_test(NAME rate_limit_middleware_test COMMAND rate_limit_middleware_test)
 
