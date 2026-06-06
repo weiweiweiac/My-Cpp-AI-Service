@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <mutex>
+#include <type_traits>
 #include <cppconn/connection.h>
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
@@ -76,13 +77,32 @@ public:
 private:
      // 辅助函数：递归终止条件
     void bindParams(sql::PreparedStatement*, int) {}
+
+    template<typename T>
+    void bindOneParam(sql::PreparedStatement* stmt, int index, T&& value)
+    {
+        using ValueType = std::decay_t<T>;
+        if constexpr (std::is_same_v<ValueType, std::string>)
+        {
+            stmt->setString(index, value);
+        }
+        else if constexpr (std::is_same_v<ValueType, const char*> ||
+                           std::is_same_v<ValueType, char*>)
+        {
+            stmt->setString(index, value == nullptr ? "" : value);
+        }
+        else
+        {
+            stmt->setString(index, std::to_string(std::forward<T>(value)));
+        }
+    }
     
     // 辅助函数：绑定参数
     template<typename T, typename... Args>
     void bindParams(sql::PreparedStatement* stmt, int index, 
                    T&& value, Args&&... args) 
     {
-        stmt->setString(index, std::to_string(std::forward<T>(value)));
+        bindOneParam(stmt, index, std::forward<T>(value));
         bindParams(stmt, index + 1, std::forward<Args>(args)...);
     }
     
